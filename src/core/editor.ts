@@ -18,8 +18,9 @@ export class Editor {
     console.log('Editor constructor called with element:', element);
     this.container = element;
     
-    // Apply container class
+    // Apply container class and styles
     this.container.classList.add('openrte-container');
+    this.applyContainerStyles();
     
     this.selectionManager = new SelectionManager(element);
     
@@ -34,11 +35,13 @@ export class Editor {
     console.log('Patching container with editor VDOM');
     patch(element, this.vdom);
     
-    // Initialize plugins
-    this.plugins.forEach(plugin => plugin.init(this));
-    
     // Store reference to content element for direct access
     this.contentElement = element.querySelector('.openrte-content');
+    
+    // Apply styles directly to ensure content area is visible
+    if (this.contentElement) {
+      this.applyContentStyles(this.contentElement as HTMLElement);
+    }
     
     // Initialize event listeners
     this.initializeEventListeners();
@@ -46,7 +49,37 @@ export class Editor {
     // Insert initial paragraph if empty
     setTimeout(() => {
       this.ensureContent();
-    }, 0);
+      
+      // Initialize plugins after DOM is ready
+      this.plugins.forEach(plugin => plugin.init(this));
+    }, 100);
+  }
+  
+  private applyContainerStyles(): void {
+    // Apply styles directly to the container
+    Object.assign(this.container.style, {
+      width: '100%',
+      minHeight: '300px',
+      display: 'flex',
+      flexDirection: 'column',
+      boxSizing: 'border-box'
+    });
+  }
+  
+  private applyContentStyles(element: HTMLElement): void {
+    // Apply styles directly to the content area
+    Object.assign(element.style, {
+      minHeight: '200px',
+      height: '300px',
+      padding: '16px',
+      fontFamily: 'sans-serif',
+      lineHeight: '1.5',
+      flexGrow: '1',
+      overflowY: 'auto',
+      border: '1px solid #ccc',
+      outline: 'none',
+      backgroundColor: 'white'
+    });
   }
   
   private ensureContent(): void {
@@ -81,34 +114,6 @@ export class Editor {
     } else {
       console.error('Content area not found for event listeners');
     }
-    
-    // Add direct event listeners to buttons
-    setTimeout(() => {
-      this.addDirectButtonListeners();
-    }, 100);
-  }
-  
-  private addDirectButtonListeners(): void {
-    const buttons = this.container.querySelectorAll('button');
-    
-    buttons.forEach(button => {
-      const text = button.textContent?.trim();
-      
-      console.log('Adding direct event listener to button:', text);
-      
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        console.log(`Button ${text} clicked directly`);
-        
-        if (text === 'B') {
-          this.formattingPlugin.executeBold();
-        } else if (text === 'I') {
-          this.formattingPlugin.executeItalic();
-        } else if (text === 'U') {
-          this.formattingPlugin.executeUnderline();
-        }
-      });
-    });
   }
 
   private addEventHandler<K extends keyof HTMLElementEventMap>(
@@ -122,23 +127,55 @@ export class Editor {
   }
 
   private createEditorDOM(): VNode {
-    return h('div', { class: 'openrte-editor' }, [
+    return h('div', { 
+      class: 'openrte-editor',
+      style: `
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 100%;
+        min-width: 300px;
+        max-width: 800px;
+        margin: 0 auto;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+      `
+    }, [
       this.createToolbar(),
       this.createContentArea()
     ]);
   }
 
   private createToolbar(): VNode {
-    return h('div', { class: 'openrte-toolbar' }, 
-      this.formattingPlugin.createToolbar()
-    );
+    return h('div', { 
+      class: 'openrte-toolbar',
+      style: `
+        padding: 8px;
+        border-bottom: 1px solid #ddd;
+        display: flex;
+        gap: 4px;
+        background-color: #f8f8f8;
+        flex-shrink: 0;
+      `
+    }, this.formattingPlugin.createToolbar());
   }
 
   private createContentArea(): VNode {
     return h('div', { 
       class: 'openrte-content',
       contenteditable: 'true',
-      style: 'min-height: 200px; height: 300px; padding: 16px; flex-grow: 1; overflow-y: auto;'
+      style: `
+        min-height: 200px;
+        height: 300px;
+        padding: 16px;
+        font-family: sans-serif;
+        line-height: 1.5;
+        flex-grow: 1;
+        overflow-y: auto;
+        border: none;
+        outline: none;
+        background-color: white;
+      `
     }, ['']);
   }
 

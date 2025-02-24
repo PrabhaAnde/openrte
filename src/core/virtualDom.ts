@@ -12,61 +12,62 @@ export function h(type: string, props: { [key: string]: any } = {}, children: (V
   };
 }
 
+// Helper function to apply style string
+function applyStyles(element: HTMLElement, styleString: string): void {
+  const styles = styleString.split(';').filter(s => s.trim());
+  
+  styles.forEach(style => {
+    const [property, value] = style.split(':').map(s => s.trim());
+    if (property && value) {
+      (element.style as any)[property] = value;
+    }
+  });
+}
+
 export function patch(node: Element | VNode, vnode: VNode): Element {
   console.log('Patching:', { node, vnode }); // Debug
   
   // If the node is already an element and we're recreating the same type of element
   // We can reuse it instead of creating a new one (this helps preserve focus)
-  let element: Element;
+  let element: HTMLElement;
   
   if (node instanceof Element && node.tagName.toLowerCase() === vnode.type.toLowerCase()) {
     // Reuse existing element
-    element = node;
+    element = node as HTMLElement;
     // Clear existing attributes
     while (element.attributes.length > 0) {
       element.removeAttribute(element.attributes[0].name);
     }
-    // Clear event listeners - This requires keeping track of listeners separately
-    // as we can't enumerate them directly
   } else {
     // Create new element
     element = document.createElement(vnode.type);
+  }
+  
+  // Add debugging class to track elements
+  if (vnode.props.class && vnode.props.class.includes('openrte')) {
+    element.classList.add('openrte-debug');
   }
   
   // Apply properties
   Object.entries(vnode.props).forEach(([key, value]) => {
     // Handle special cases
     if (key === 'contenteditable') {
-      // element.contentEditable = value;
-      element.setAttribute('contenteditable', String(value));
-    } 
+      element.contentEditable = value;
+    }
+    // Handle style property specially to ensure it's applied
+    else if (key === 'style' && typeof value === 'string') {
+      applyStyles(element, value);
+    }
     // Handle event handlers (props starting with 'on')
     else if (key.startsWith('on') && typeof value === 'function') {
       const eventName = key.substring(2).toLowerCase(); // e.g., onclick -> click
       
-      // Use a data attribute to mark this handler as applied
-      const handlerKey = `data-handler-${eventName}`;
-      
-      // Remove old handler if one exists (to prevent duplicates)
-      const oldHandler = element.getAttribute(handlerKey);
-      if (oldHandler) {
-        try {
-          // This is a hack to store reference, but for now we'll just re-add
-          // element.removeEventListener(eventName, window[oldHandler as any]);
-          element.removeEventListener(eventName, (element as any)[handlerKey]);
-        } catch (e) {
-          console.warn('Failed to remove old event listener', e);
-        }
-      }
-      
-      // Add the new handler
+      // Add the event listener
       element.addEventListener(eventName, value);
-      
-      // Store a reference (though this is incomplete - we'd need a registry)
-      // For now, this at least marks that we've applied a handler
-      element.setAttribute(handlerKey, 'applied');
-      
       console.log(`Added ${eventName} event listener to`, element);
+      
+      // Mark this element to help debug
+      element.setAttribute('data-has-event', eventName);
     } 
     else {
       element.setAttribute(key, value);
@@ -75,7 +76,10 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
 
   // Handle children - first clear existing content if we're reusing the element
   if (node instanceof Element && node.tagName.toLowerCase() === vnode.type.toLowerCase()) {
-    element.innerHTML = '';
+    // Clear existing children
+    while (element.firstChild) {
+      element.removeChild(element.firstChild);
+    }
   }
   
   // Append children
@@ -92,6 +96,18 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
   // Replace the node if needed
   if (node instanceof Element && node !== element) {
     node.replaceWith(element);
+  }
+  
+  // Add additional debugging for openrte-content
+  if (element.classList.contains('openrte-content')) {
+    console.log('Content element created/updated with styles:', element.style.cssText);
+    
+    // Force some critical styles directly
+    element.style.minHeight = '300px';
+    element.style.height = '300px';
+    element.style.padding = '16px';
+    element.style.border = '1px solid blue';
+    element.style.backgroundColor = 'white';
   }
   
   return element;

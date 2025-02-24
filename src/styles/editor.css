@@ -1,8 +1,24 @@
+.openrte-editor {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  width: 100%;
+  min-width: 300px;
+  max-width: 800px;
+  margin: 0 auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.openrte-container {
+  width: 100%;
+  min-height: 300px;
+}
+
 .openrte-toolbar {
   padding: 8px;
   border-bottom: 1px solid #ddd;
   display: flex;
   gap: 4px;
+  background-color: #f8f8f8;
 }
 
 .openrte-toolbar button {
@@ -10,9 +26,23 @@
   border: 1px solid #ccc;
   background: #fff;
   cursor: pointer;
+  border-radius: 3px;
+  font-weight: bold;
+  min-width: 30px;
+  transition: background-color 0.2s;
+}
+
+.openrte-toolbar button:hover {
+  background-color: #f0f0f0;
+}
+
+.openrte-toolbar button:active {
+  background-color: #e0e0e0;
 }
 
 .openrte-content {
   min-height: 200px;
   padding: 16px;
+  font-family: sans-serif;
+  line-height: 1.5;
 }

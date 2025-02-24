@@ -20,7 +20,13 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
   Object.entries(vnode.props).forEach(([key, value]) => {
     if (key === 'contenteditable') {
       element.contentEditable = value;
-    } else {
+    } 
+    // Handle event handlers (props starting with 'on')
+    else if (key.startsWith('on') && typeof value === 'function') {
+      const eventName = key.substring(2).toLowerCase(); // Remove 'on' prefix and convert to lowercase
+      element.addEventListener(eventName, value);
+    } 
+    else {
       element.setAttribute(key, value);
     }
   });

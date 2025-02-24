@@ -3,12 +3,11 @@
   border-radius: 4px !important;
   width: 100% !important;
   min-width: 300px !important;
-  max-width: 100% !important; /* Allow full width */
+  max-width: 800px !important;
   margin: 0 auto !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
   display: flex !important;
   flex-direction: column !important;
-  background-color: #f8f8f8 !important;
 }
 
 .openrte-container {
@@ -26,19 +25,35 @@
   gap: 4px !important;
   background-color: #f8f8f8 !important;
   flex-shrink: 0 !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+
+.openrte-toolbar-group {
+  display: flex !important;
+  gap: 4px !important;
+  margin-right: 8px !important;
+  padding-right: 8px !important;
+  border-right: 1px solid #ddd !important;
+  align-items: center !important;
+}
+
+.openrte-toolbar-group:last-child {
+  border-right: none !important;
 }
 
 .openrte-toolbar button {
   padding: 4px 8px !important;
   border: 1px solid #ccc !important;
   background: #fff !important;
-  color: #333 !important; /* Ensure text is visible */
   cursor: pointer !important;
   border-radius: 3px !important;
-  font-weight: bold !important;
   min-width: 30px !important;
   transition: background-color 0.2s !important;
   margin: 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .openrte-toolbar button:hover {
@@ -49,6 +64,43 @@
   background-color: #e0e0e0 !important;
 }
 
+.openrte-toolbar button.active {
+  background-color: #e0e0e0 !important;
+  border-color: #aaa !important;
+}
+
+.openrte-toolbar select {
+  padding: 4px !important;
+  border: 1px solid #ccc !important;
+  background: #fff !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+  margin: 2px !important;
+}
+
+/* Icon styles */
+.openrte-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 16px !important;
+  height: 16px !important;
+  vertical-align: middle !important;
+}
+
+.openrte-toolbar-control {
+  display: flex !important;
+  align-items: center !important;
+  margin: 2px !important;
+}
+
+.openrte-toolbar-icon-container {
+  display: flex !important;
+  align-items: center !important;
+  margin-right: 4px !important;
+}
+
+/* Editor content area */
 .openrte-content {
   min-height: 200px !important;
   height: 300px !important; /* Explicit height */
@@ -60,37 +112,73 @@
   border: none !important;
   outline: none !important;
   background-color: white !important;
-  color: #333 !important; /* Ensure text is visible */
 }
 
-/* Fix for text appearing with gray background */
-.openrte-content p {
-  background-color: transparent !important;
-  color: #333 !important;
-  margin: 0 0 10px 0 !important;
-  padding: 0 !important;
+/* Content styles for the editor */
+.openrte-content h1 {
+  font-size: 2em !important;
+  margin-top: 0.67em !important;
+  margin-bottom: 0.67em !important;
 }
 
-/* Override any existing text styling */
-.openrte-content * {
-  background-color: transparent !important;
-  color: #333 !important;
+.openrte-content h2 {
+  font-size: 1.5em !important;
+  margin-top: 0.83em !important;
+  margin-bottom: 0.83em !important;
 }
 
-/* Only exception is when text is actually formatted */
-.openrte-content strong,
-.openrte-content b {
-  font-weight: bold !important;
-  background-color: transparent !important;
+.openrte-content h3 {
+  font-size: 1.17em !important;
+  margin-top: 1em !important;
+  margin-bottom: 1em !important;
 }
 
-.openrte-content em,
-.openrte-content i {
+.openrte-content h4 {
+  font-size: 1em !important;
+  margin-top: 1.33em !important;
+  margin-bottom: 1.33em !important;
+}
+
+.openrte-content h5 {
+  font-size: 0.83em !important;
+  margin-top: 1.67em !important;
+  margin-bottom: 1.67em !important;
+}
+
+.openrte-content h6 {
+  font-size: 0.67em !important;
+  margin-top: 2.33em !important;
+  margin-bottom: 2.33em !important;
+}
+
+.openrte-content blockquote {
+  border-left: 4px solid #ccc !important;
+  padding-left: 16px !important;
+  margin-left: 0 !important;
   font-style: italic !important;
-  background-color: transparent !important;
 }
 
-.openrte-content u {
+.openrte-content ul {
+  padding-left: 40px !important;
+  list-style-type: disc !important;
+}
+
+.openrte-content ol {
+  padding-left: 40px !important;
+  list-style-type: decimal !important;
+}
+
+.openrte-content a {
+  color: #0066cc !important;
   text-decoration: underline !important;
-  background-color: transparent !important;
+}
+
+.openrte-content a:hover {
+  color: #004499 !important;
+}
+
+/* Make sure links are highlighted when selected */
+.openrte-content a:focus {
+  outline: 2px solid #0066cc !important;
+  outline-offset: 2px !important;
 }

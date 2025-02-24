@@ -1,5 +1,7 @@
 import { h, VNode, patch } from './virtualDom';
 import { TextFormattingPlugin } from '../plugins/textFormatting';
+import { ParagraphFormattingPlugin } from '../plugins/paragraphFormatting';
+import { TextSizePlugin } from '../plugins/textSize';
 import { SelectionManager } from './selection';
 import { ContentModel } from '../types/contentModel';
 import { Plugin } from './plugin';
@@ -11,6 +13,8 @@ export class Editor {
   private plugins: Plugin[];
   private selectionManager: SelectionManager;
   private formattingPlugin: TextFormattingPlugin;
+  private paragraphPlugin: ParagraphFormattingPlugin;
+  private textSizePlugin: TextSizePlugin;
   private eventListeners: { element: EventTarget; type: string; listener: EventListener }[] = [];
   private contentElement: HTMLElement | null = null;
 
@@ -25,7 +29,13 @@ export class Editor {
     
     // Initialize plugins
     this.formattingPlugin = new TextFormattingPlugin(element);
-    this.plugins = [this.formattingPlugin];
+    this.paragraphPlugin = new ParagraphFormattingPlugin(element);
+    this.textSizePlugin = new TextSizePlugin(element);
+    this.plugins = [
+      this.formattingPlugin,
+      this.paragraphPlugin,
+      this.textSizePlugin
+    ];
     
     // Create and patch initial DOM
     this.vdom = this.createEditorDOM();
@@ -49,40 +59,9 @@ export class Editor {
     }, 0);
   }
   
-  // Command mapping for different representations
-  private getCommandMap(): Record<string, string> {
-    return {
-      'b': 'bold',
-      'i': 'italic',
-      'u': 'underline',
-      'bold': 'bold',
-      'italic': 'italic',
-      'underline': 'underline',
-      'Bold': 'bold',
-      'Italic': 'italic',
-      'Underline': 'underline',
-    };
-  }
-  
-  // Centralized keyboard shortcuts definition
-  private getKeyboardShortcuts(): Record<string, string> {
-    // First get shortcuts from plugins
-    const pluginShortcuts = this.formattingPlugin.getKeyboardShortcuts();
-    
-    // Then add/override with editor-specific shortcuts
-    const editorShortcuts: Record<string, string> = {
-      // Add any editor-specific shortcuts here
-    };
-    
-    // Combine shortcuts with plugin shortcuts taking precedence
-    return { ...pluginShortcuts, ...editorShortcuts };
-  }
-  
   private ensureContent(): void {
     if (this.contentElement && !this.contentElement.innerHTML.trim()) {
       const p = document.createElement('p');
-      p.style.color = '#333'; // Ensure text is visible
-      p.style.backgroundColor = 'transparent';
       p.innerHTML = '&nbsp;'; // Non-breaking space to ensure the paragraph has content
       this.contentElement.appendChild(p);
       
@@ -123,51 +102,59 @@ export class Editor {
     const buttons = this.container.querySelectorAll('button');
     
     buttons.forEach(button => {
-      const text = button.textContent?.trim() || '';
+      const text = button.textContent?.trim();
       
-      // Get command from data attributes first, then from text content
-      let dataCommand = button.getAttribute('data-command');
-      let dataCommandExact = button.getAttribute('data-command-exact');
-      
-      console.log('Adding direct event listener to button:', text, 
-                  'data-command:', dataCommand,
-                  'data-command-exact:', dataCommandExact);
-      
-      // Use the most specific command available
-      const exactCommand = dataCommandExact || dataCommand || this.getCommandFromButtonText(text);
+      console.log('Adding direct event listener to button:', text);
       
       button.addEventListener('click', (e) => {
         e.preventDefault();
-        e.stopPropagation();
+        console.log(`Button ${text} clicked directly`);
         
-        console.log(`Button ${text} clicked directly, command: ${exactCommand}`);
-        if (exactCommand) {
-          // Try both the exact command and potentially a mapped version
-          const commandMap = this.getCommandMap();
-          const normalizedCommand = exactCommand in commandMap ? commandMap[exactCommand] : exactCommand;
-          
-          this.formattingPlugin.executeCommand(normalizedCommand);
-        } else {
-          console.warn(`No command found for button: ${text}`);
+        // Text formatting commands
+        if (text === 'B') {
+          this.formattingPlugin.executeBold();
+        } else if (text === 'I') {
+          this.formattingPlugin.executeItalic();
+        } else if (text === 'U') {
+          this.formattingPlugin.executeUnderline();
+        }
+        // Paragraph formatting commands
+        else if (text === 'L') {
+          this.paragraphPlugin.executeAlignLeft();
+        } else if (text === 'C') {
+          this.paragraphPlugin.executeAlignCenter();
+        } else if (text === 'R') {
+          this.paragraphPlugin.executeAlignRight();
+        } else if (text === 'OL') {
+          this.paragraphPlugin.executeOrderedList();
+        } else if (text === 'UL') {
+          this.paragraphPlugin.executeUnorderedList();
+        } else if (text === 'H') {
+          this.paragraphPlugin.executeHeading();
+        } else if (text === 'BQ') {
+          this.paragraphPlugin.executeBlockquote();
+        } else if (text === 'Link') {
+          this.paragraphPlugin.executeInsertLink();
         }
       });
     });
-  }
-  
-  private getCommandFromButtonText(text: string): string | null {
-    const commandMap = this.getCommandMap();
-    
-    // First check if there's a direct mapping
-    if (text.toLowerCase() in commandMap) {
-      return commandMap[text.toLowerCase()];
+
+    // Add listeners for select elements (font size, headings)
+    const fontSizeSelect = this.container.querySelector('select[data-command="fontSize"]');
+    if (fontSizeSelect) {
+      fontSizeSelect.addEventListener('change', (e) => {
+        const value = (e.target as HTMLSelectElement).value;
+        this.textSizePlugin.setFontSize(value);
+      });
     }
-    
-    // Then check if it's a single letter that maps to a command
-    if (text.length === 1 && text.toLowerCase() in commandMap) {
-      return commandMap[text.toLowerCase()];
+
+    const headingSelect = this.container.querySelector('select[data-command="heading"]');
+    if (headingSelect) {
+      headingSelect.addEventListener('change', (e) => {
+        const value = (e.target as HTMLSelectElement).value;
+        this.paragraphPlugin.executeHeading(value);
+      });
     }
-    
-    return null;
   }
 
   private addEventHandler<K extends keyof HTMLElementEventMap>(
@@ -188,29 +175,79 @@ export class Editor {
   }
 
   private createToolbar(): VNode {
-    return h('div', { class: 'openrte-toolbar' }, 
-      this.formattingPlugin.createToolbar()
-    );
+    // Toolbar groups for better organization
+    const textFormattingGroup = h('div', { 
+      class: 'openrte-toolbar-group', 
+      style: 'display: flex; gap: 4px; margin-right: 8px; padding-right: 8px; border-right: 1px solid #ddd;'
+    }, this.formattingPlugin.createToolbar());
+    
+    const paragraphFormattingGroup = h('div', { 
+      class: 'openrte-toolbar-group',
+      style: 'display: flex; gap: 4px; margin-right: 8px; padding-right: 8px; border-right: 1px solid #ddd;'
+    }, this.paragraphPlugin.createToolbar());
+
+    const textSizeGroup = h('div', { 
+      class: 'openrte-toolbar-group',
+      style: 'display: flex; gap: 4px; margin-right: 8px;'
+    }, this.textSizePlugin.createToolbar());
+
+    return h('div', { class: 'openrte-toolbar' }, [
+      textFormattingGroup,
+      paragraphFormattingGroup,
+      textSizeGroup
+    ]);
   }
 
   private createContentArea(): VNode {
     return h('div', { 
       class: 'openrte-content',
       contenteditable: 'true',
-      style: 'min-height: 200px; height: 300px; padding: 16px; flex-grow: 1; overflow-y: auto; color: #333; background-color: white;'
+      style: 'min-height: 200px; height: 300px; padding: 16px; flex-grow: 1; overflow-y: auto;'
     }, ['']);
   }
 
   private handleKeyDown = (event: KeyboardEvent): void => {
     if (event.ctrlKey || event.metaKey) {
-      const key = event.key.toLowerCase();
-      const shortcuts = this.getKeyboardShortcuts();
-      
-      if (key in shortcuts) {
-        event.preventDefault();
-        const command = shortcuts[key];
-        console.log(`Keyboard shortcut detected: Ctrl+${key} -> ${command}`);
-        this.formattingPlugin.executeCommand(command);
+      switch(event.key.toLowerCase()) {
+        // Text formatting shortcuts
+        case 'b':
+          event.preventDefault();
+          console.log('Ctrl+B keyboard shortcut detected');
+          this.formattingPlugin.executeBold();
+          break;
+        case 'i':
+          event.preventDefault();
+          console.log('Ctrl+I keyboard shortcut detected');
+          this.formattingPlugin.executeItalic();
+          break;
+        case 'u':
+          event.preventDefault();
+          console.log('Ctrl+U keyboard shortcut detected');
+          this.formattingPlugin.executeUnderline();
+          break;
+          
+        // List shortcuts
+        case '7': // For ordered list (Ctrl+7 or Cmd+7)
+          if (event.shiftKey) {
+            event.preventDefault();
+            console.log('Ctrl+Shift+7 keyboard shortcut detected (ordered list)');
+            this.paragraphPlugin.executeOrderedList();
+          }
+          break;
+        case '8': // For bullet list (Ctrl+8 or Cmd+8)
+          if (event.shiftKey) {
+            event.preventDefault();
+            console.log('Ctrl+Shift+8 keyboard shortcut detected (bullet list)');
+            this.paragraphPlugin.executeUnorderedList();
+          }
+          break;
+          
+        // Link shortcut
+        case 'k':
+          event.preventDefault();
+          console.log('Ctrl+K keyboard shortcut detected (insert link)');
+          this.paragraphPlugin.executeInsertLink();
+          break;
       }
     }
   };
@@ -218,7 +255,42 @@ export class Editor {
   private handleInput = (): void => {
     // No need to re-render on input, as we're working with contentEditable
     console.log('Input event detected');
+    
+    // Here we could update our content model based on the current HTML
+    // and trigger onChange callbacks
+    this.updateContentModel();
   };
+  
+  private updateContentModel(): void {
+    // This method would parse the HTML content and update the content model
+    // This is a placeholder for the actual implementation
+    if (this.contentElement) {
+      // For now, we'll just create a simple representation
+      const document: ContentModel = { 
+        type: 'document',
+        parent: null,
+        children: []
+      };
+      
+      const paragraph: any = {
+        type: 'paragraph',
+        parent: document,
+        children: []
+      };
+      
+      const textRun: any = {
+        type: 'text',
+        parent: paragraph,
+        children: [],
+        text: this.contentElement.innerHTML
+      };
+      
+      paragraph.children.push(textRun);
+      document.children.push(paragraph);
+      
+      this.content = document;
+    }
+  }
 
   setContent(content: ContentModel): void {
     this.content = content;
@@ -233,7 +305,27 @@ export class Editor {
   }
 
   getContent(): ContentModel {
+    // Update the content model before returning it
+    this.updateContentModel();
     return this.content;
+  }
+  
+  // Method to get the HTML content
+  getHTML(): string {
+    return this.contentElement?.innerHTML || '';
+  }
+  
+  // Method to set HTML content directly
+  setHTML(html: string): void {
+    if (this.contentElement) {
+      this.contentElement.innerHTML = html;
+      this.updateContentModel();
+    }
+  }
+  
+  // Get plain text content
+  getPlainText(): string {
+    return this.contentElement?.textContent || '';
   }
 
   destroy(): void {

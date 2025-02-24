@@ -2,6 +2,7 @@ export interface VNode {
   type: string;
   props: { [key: string]: any };
   children: (VNode | string)[];
+  __html?: string; // For inserting HTML directly
 }
 
 export function h(type: string, props: { [key: string]: any } = {}, children: (VNode | string)[] = []): VNode {
@@ -10,18 +11,6 @@ export function h(type: string, props: { [key: string]: any } = {}, children: (V
     props, 
     children: Array.isArray(children) ? children : [children] 
   };
-}
-
-// Helper function to apply style string
-function applyStyles(element: HTMLElement, styleString: string): void {
-  const styles = styleString.split(';').filter(s => s.trim());
-  
-  styles.forEach(style => {
-    const [property, value] = style.split(':').map(s => s.trim());
-    if (property && value) {
-      (element.style as any)[property] = value;
-    }
-  });
 }
 
 export function patch(node: Element | VNode, vnode: VNode): Element {
@@ -38,6 +27,8 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
     while (element.attributes.length > 0) {
       element.removeAttribute(element.attributes[0].name);
     }
+    // Clear event listeners - This requires keeping track of listeners separately
+    // as we can't enumerate them directly
   } else {
     // Create new element
     element = document.createElement(vnode.type);
@@ -47,22 +38,36 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
   Object.entries(vnode.props).forEach(([key, value]) => {
     // Handle special cases
     if (key === 'contenteditable') {
-      element.setAttribute('contenteditable', value);
-    }
-    // Handle style property specially to ensure it's applied
-    else if (key === 'style' && typeof value === 'string') {
-      applyStyles(element as HTMLElement, value);
-    }
+      // element.contentEditable = value;
+      element.setAttribute('contenteditable', String(value));
+    } 
     // Handle event handlers (props starting with 'on')
     else if (key.startsWith('on') && typeof value === 'function') {
       const eventName = key.substring(2).toLowerCase(); // e.g., onclick -> click
       
-      // Add the event listener
-      element.addEventListener(eventName, value);
-      console.log(`Added ${eventName} event listener to`, element);
+      // Use a data attribute to mark this handler as applied
+      const handlerKey = `data-handler-${eventName}`;
       
-      // Mark this element to help debug
-      element.setAttribute('data-has-event', eventName);
+      // Remove old handler if one exists (to prevent duplicates)
+      const oldHandler = element.getAttribute(handlerKey);
+      if (oldHandler) {
+        try {
+          // This is a hack to store reference, but for now we'll just re-add
+          // element.removeEventListener(eventName, window[oldHandler as any]);
+          element.removeEventListener(eventName, (element as any)[handlerKey]);
+        } catch (e) {
+          console.warn('Failed to remove old event listener', e);
+        }
+      }
+      
+      // Add the new handler
+      element.addEventListener(eventName, value);
+      
+      // Store a reference (though this is incomplete - we'd need a registry)
+      // For now, this at least marks that we've applied a handler
+      element.setAttribute(handlerKey, 'applied');
+      
+      console.log(`Added ${eventName} event listener to`, element);
     } 
     else {
       element.setAttribute(key, value);
@@ -71,16 +76,26 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
 
   // Handle children - first clear existing content if we're reusing the element
   if (node instanceof Element && node.tagName.toLowerCase() === vnode.type.toLowerCase()) {
-    // Clear existing children
-    while (element.firstChild) {
-      element.removeChild(element.firstChild);
-    }
+    element.innerHTML = '';
+  }
+  
+  // Special case for direct HTML insertion
+  if (vnode.__html) {
+    element.innerHTML = vnode.__html;
+    return element;
   }
   
   // Append children
   vnode.children.forEach(child => {
     if (typeof child === 'string') {
       element.appendChild(document.createTextNode(child));
+    } else if (child.type === '__html') {
+      // Special case for HTML content inside children
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = child.__html || '';
+      while (tempDiv.firstChild) {
+        element.appendChild(tempDiv.firstChild);
+      }
     } else {
       // Recursively create children elements
       const childElement = patch(document.createElement(child.type), child);
@@ -91,35 +106,6 @@ export function patch(node: Element | VNode, vnode: VNode): Element {
   // Replace the node if needed
   if (node instanceof Element && node !== element) {
     node.replaceWith(element);
-  }
-  
-  // Fix content area text coloring
-  if (element.classList.contains('openrte-content')) {
-    console.log('Content element created/updated with styles:', (element as HTMLElement).style.cssText);
-    
-    // Force some critical styles directly
-    (element as HTMLElement).style.minHeight = '200px';
-    (element as HTMLElement).style.height = '300px';
-    (element as HTMLElement).style.padding = '16px';
-    (element as HTMLElement).style.backgroundColor = 'white';
-    (element as HTMLElement).style.color = '#333';
-    
-    // Set up a MutationObserver to fix any newly added elements
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach(mutation => {
-        if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              const el = node as HTMLElement;
-              el.style.backgroundColor = 'transparent';
-              el.style.color = '#333';
-            }
-          });
-        }
-      });
-    });
-    
-    observer.observe(element, { childList: true, subtree: true });
   }
   
   return element;

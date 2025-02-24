@@ -1,48 +1,61 @@
 .openrte-editor {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  width: 100%;
-  min-width: 300px;
-  max-width: 800px;
-  margin: 0 auto;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ddd !important;
+  border-radius: 4px !important;
+  width: 100% !important;
+  min-width: 300px !important;
+  max-width: 800px !important;
+  margin: 0 auto !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 .openrte-container {
-  width: 100%;
-  min-height: 300px;
+  width: 100% !important;
+  min-height: 300px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
 }
 
 .openrte-toolbar {
-  padding: 8px;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  gap: 4px;
-  background-color: #f8f8f8;
+  padding: 8px !important;
+  border-bottom: 1px solid #ddd !important;
+  display: flex !important;
+  gap: 4px !important;
+  background-color: #f8f8f8 !important;
+  flex-shrink: 0 !important;
 }
 
 .openrte-toolbar button {
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-  border-radius: 3px;
-  font-weight: bold;
-  min-width: 30px;
-  transition: background-color 0.2s;
+  padding: 4px 8px !important;
+  border: 1px solid #ccc !important;
+  background: #fff !important;
+  cursor: pointer !important;
+  border-radius: 3px !important;
+  font-weight: bold !important;
+  min-width: 30px !important;
+  transition: background-color 0.2s !important;
+  margin: 2px !important;
 }
 
 .openrte-toolbar button:hover {
-  background-color: #f0f0f0;
+  background-color: #f0f0f0 !important;
 }
 
 .openrte-toolbar button:active {
-  background-color: #e0e0e0;
+  background-color: #e0e0e0 !important;
 }
 
 .openrte-content {
-  min-height: 200px;
-  padding: 16px;
-  font-family: sans-serif;
-  line-height: 1.5;
+  min-height: 200px !important;
+  height: 300px !important; /* Explicit height */
+  padding: 16px !important;
+  font-family: sans-serif !important;
+  line-height: 1.5 !important;
+  flex-grow: 1 !important;
+  overflow-y: auto !important;
+  border: none !important;
+  outline: none !important;
+  background-color: white !important;
 }

@@ -12,44 +12,93 @@ export class TextFormattingPlugin implements Plugin {
   constructor(editor: HTMLElement) {
     this.editor = editor;
     this.selectionManager = new SelectionManager(editor);
+    
+    // Define commands with bound this context to avoid issues
     this.commands = {
-      bold: () => this.toggleFormat('strong'),
-      italic: () => this.toggleFormat('em'),
-      underline: () => this.toggleFormat('u')
+      bold: this.toggleFormat.bind(this, 'strong'),
+      italic: this.toggleFormat.bind(this, 'em'),
+      underline: this.toggleFormat.bind(this, 'u')
     };
+    
+    console.log('TextFormattingPlugin constructor completed');
   }
 
   // Add public methods to access protected commands
   public executeBold(): void {
+    console.log('executeBold called');
     this.commands.bold();
   }
 
   public executeItalic(): void {
+    console.log('executeItalic called');
     this.commands.italic();
   }
 
   public executeUnderline(): void {
+    console.log('executeUnderline called');
     this.commands.underline();
   }
 
   init(editor: Editor): void {
     // Initialize plugin
-    console.log('TextFormattingPlugin initialized');
+    console.log('TextFormattingPlugin initialized with editor', editor);
+    
+    // Add direct event listeners to ensure they work
+    // We'll add them when the editor mounts
+    setTimeout(() => {
+      this.attachDirectEventListeners();
+    }, 100);
+  }
+
+  private attachDirectEventListeners(): void {
+    // Find the buttons by their text/labels
+    const buttons = Array.from(this.editor.querySelectorAll('button'));
+    console.log('Found buttons:', buttons);
+    
+    buttons.forEach(button => {
+      const text = button.textContent?.trim();
+      if (text === 'B') {
+        console.log('Attaching direct event to Bold button');
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Bold button clicked directly');
+          this.executeBold();
+        });
+      } else if (text === 'I') {
+        console.log('Attaching direct event to Italic button');
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Italic button clicked directly');
+          this.executeItalic();
+        });
+      } else if (text === 'U') {
+        console.log('Attaching direct event to Underline button');
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Underline button clicked directly');
+          this.executeUnderline();
+        });
+      }
+    });
   }
 
   createToolbar(): VNode[] {
+    console.log('Creating toolbar buttons');
     return [
-      createButton('B', () => {
-        console.log('Bold button clicked');
-        this.commands.bold();
+      createButton('B', (e) => {
+        e.preventDefault();
+        console.log('Bold button clicked via virtual DOM');
+        this.executeBold();
       }),
-      createButton('I', () => {
-        console.log('Italic button clicked');
-        this.commands.italic();
+      createButton('I', (e) => {
+        e.preventDefault();
+        console.log('Italic button clicked via virtual DOM');
+        this.executeItalic();
       }),
-      createButton('U', () => {
-        console.log('Underline button clicked');
-        this.commands.underline();
+      createButton('U', (e) => {
+        e.preventDefault();
+        console.log('Underline button clicked via virtual DOM');
+        this.executeUnderline();
       })
     ];
   }
@@ -67,16 +116,32 @@ export class TextFormattingPlugin implements Plugin {
     }
     
     const range = selection.getRangeAt(0);
+    if (range.collapsed) {
+      console.log('Range is collapsed, cannot format empty selection');
+      return;
+    }
+
     try {
       // Check if we're already in this format
       if (this.isFormatActive(tag)) {
+        console.log(`Format ${tag} is active, removing it`);
         this.unwrapFormat(range, tag);
       } else {
+        console.log(`Format ${tag} is not active, applying it`);
         const element = document.createElement(tag);
         range.surroundContents(element);
       }
     } catch (error) {
       console.error('Error applying format:', error);
+      
+      // Fallback approach for complex selections
+      const documentFragment = range.extractContents();
+      const element = document.createElement(tag);
+      element.appendChild(documentFragment);
+      range.insertNode(element);
+      
+      // Cleanup empty format elements
+      this.cleanupEmptyNodes(this.editor);
     }
   }
 
@@ -118,5 +183,33 @@ export class TextFormattingPlugin implements Plugin {
         parent.removeChild(node);
       }
     }
+  }
+
+  private cleanupEmptyNodes(root: Node): void {
+    const treeWalker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode: function(node) {
+          return (node.childNodes.length === 0) ? 
+            NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
+      }
+    );
+    
+    const emptyNodes: Node[] = [];
+    let currentNode = treeWalker.nextNode();
+    
+    while (currentNode) {
+      emptyNodes.push(currentNode);
+      currentNode = treeWalker.nextNode();
+    }
+    
+    // Remove empty nodes
+    emptyNodes.forEach(node => {
+      if (node.parentNode) {
+        node.parentNode.removeChild(node);
+      }
+    });
   }
 }

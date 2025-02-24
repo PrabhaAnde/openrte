@@ -1,3 +1,5 @@
+// src/plugins/textFormatting/index.ts
+
 import { Plugin } from '../../core/plugin';
 import { Editor } from '../../core/editor';
 import { createButton } from '../../ui/button';
@@ -5,11 +7,10 @@ import { VNode } from '../../core/virtualDom';
 import { SelectionManager } from '../../core/selection';
 
 export class TextFormattingPlugin implements Plugin {
-  // Make commands public instead of protected
-  public commands: { [key: string]: () => void };
+  protected commands: { [key: string]: () => void };
   private editor: HTMLElement;
   private selectionManager: SelectionManager;
-  private buttonDefinitions: { label: string; command: string; title?: string }[] = [];
+  private keyboardShortcuts: { [key: string]: string };
 
   constructor(editor: HTMLElement) {
     this.editor = editor;
@@ -17,102 +18,95 @@ export class TextFormattingPlugin implements Plugin {
     
     // Define commands with bound this context to avoid issues
     this.commands = {
-      'bold': this.toggleFormat.bind(this, 'strong'),
-      'italic': this.toggleFormat.bind(this, 'em'),
-      'underline': this.toggleFormat.bind(this, 'u')
+      bold: this.toggleFormat.bind(this, 'strong'),
+      italic: this.executeItalic.bind(this),  // Use the executeItalic method directly
+      underline: this.toggleFormat.bind(this, 'u')
     };
     
-    // Define button definitions - make sure the commands match exactly the keys in the commands object
-    this.buttonDefinitions = [
-      { label: 'B', command: 'bold', title: 'Bold (Ctrl+B)' },
-      { label: 'I', command: 'italic', title: 'Italic (Ctrl+I)' },
-      { label: 'U', command: 'underline', title: 'Underline (Ctrl+U)' }
-    ];
-    
-    // Add shortcuts for capitalized command names to handle case sensitivity issues
-    this.commands['Bold'] = this.commands['bold'];
-    this.commands['Italic'] = this.commands['italic'];
-    this.commands['Underline'] = this.commands['underline'];
-    
-    // Add shortcuts for B, I, U to handle direct command cases
-    this.commands['b'] = this.commands['bold'];
-    this.commands['i'] = this.commands['italic'];
-    this.commands['u'] = this.commands['underline'];
-    
-    console.log('TextFormattingPlugin constructor completed, available commands:', Object.keys(this.commands));
-  }
-
-  // Generic command execution method
-  public executeCommand(commandName: string): void {
-    // If commandName is undefined or null, default to empty string
-    const inputCommand = commandName || '';
-    
-    // Try various forms of the command
-    // 1. Try as-is
-    // 2. Try lowercase
-    // 3. Try single-letter version
-    const possibleCommands = [
-      inputCommand,
-      inputCommand.toLowerCase(),
-      inputCommand.charAt(0).toLowerCase()
-    ];
-    
-    // Try to find a matching command
-    let foundCommand = false;
-    for (const cmd of possibleCommands) {
-      if (cmd in this.commands) {
-        console.log(`Executing command: ${cmd}`);
-        this.commands[cmd]();
-        foundCommand = true;
-        break;
-      }
-    }
-    
-    if (!foundCommand) {
-      console.warn(`Command not found: ${inputCommand}, available commands:`, Object.keys(this.commands));
-      
-      // Print all the commands for debugging
-      console.log('Command object dump:', this.commands);
-      
-      // For single letter commands like 'i', try to map to full commands
-      const letterToCommand: Record<string, string> = {
-        'b': 'bold',
-        'i': 'italic',
-        'u': 'underline'
-      };
-      
-      // If it's a single letter, try the mapped version
-      if (inputCommand.length === 1 && inputCommand in letterToCommand) {
-        const mappedCommand = letterToCommand[inputCommand];
-        if (mappedCommand in this.commands) {
-          console.log(`Found mapped command ${mappedCommand} for letter ${inputCommand}`);
-          this.commands[mappedCommand]();
-          return;
-        }
-      }
-    }
-  }
-
-  // Public methods for specific commands (for backward compatibility)
-  public executeBold(): void {
-    this.executeCommand('bold');
-  }
-
-  public executeItalic(): void {
-    this.executeCommand('italic');
-  }
-
-  public executeUnderline(): void {
-    this.executeCommand('underline');
-  }
-
-  // Get keyboard shortcuts mapping
-  public getKeyboardShortcuts(): { [key: string]: string } {
-    return {
+    // Define keyboard shortcuts
+    this.keyboardShortcuts = {
       'b': 'bold',
       'i': 'italic',
       'u': 'underline'
     };
+    
+    console.log('TextFormattingPlugin constructor completed');
+  }
+
+  // Add public methods to access protected commands
+  public executeBold(): void {
+    console.log('executeBold called');
+    
+    // Focus the editor to ensure execCommand works
+    const contentArea = this.editor.querySelector('.openrte-content');
+    if (contentArea) {
+      (contentArea as HTMLElement).focus();
+    }
+    
+    try {
+      document.execCommand('bold', false);
+      console.log('Applied bold using execCommand');
+    } catch (e) {
+      console.error('Error applying bold with execCommand:', e);
+      // Fallback to manual formatting
+      this.toggleFormat('strong');
+    }
+  }
+
+  public executeItalic(): void {
+    console.log('executeItalic called');
+    
+    // Save current selection
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) {
+      console.log('No selection found');
+      return;
+    }
+    
+    // Focus the editor to ensure execCommand works
+    const contentArea = this.editor.querySelector('.openrte-content');
+    if (contentArea) {
+      (contentArea as HTMLElement).focus();
+    }
+    
+    // Use execCommand directly for italic - most reliable approach
+    try {
+      document.execCommand('italic', false);
+      console.log('Applied italic using execCommand');
+    } catch (e) {
+      console.error('Error applying italic with execCommand:', e);
+      
+      // Last resort fallback
+      try {
+        // Try document.createElement approach
+        const range = selection.getRangeAt(0);
+        if (!range.collapsed) {
+          const iNode = document.createElement('i');
+          range.surroundContents(iNode);
+        }
+      } catch (e2) {
+        console.error('All italic formatting methods failed:', e2);
+      }
+    }
+  }
+
+  public executeUnderline(): void {
+    console.log('executeUnderline called');
+    
+    // Focus the editor to ensure execCommand works
+    const contentArea = this.editor.querySelector('.openrte-content');
+    if (contentArea) {
+      (contentArea as HTMLElement).focus();
+    }
+    
+    try {
+      document.execCommand('underline', false);
+      console.log('Applied underline using execCommand');
+    } catch (e) {
+      console.error('Error applying underline with execCommand:', e);
+      // Fallback to manual formatting
+      this.toggleFormat('u');
+    }
   }
 
   init(editor: Editor): void {
@@ -125,63 +119,83 @@ export class TextFormattingPlugin implements Plugin {
     }, 100);
   }
 
-  private attachDirectEventListeners(): void {
+  public attachDirectEventListeners(): void {
     // Find the buttons by their text/labels
     const buttons = Array.from(this.editor.querySelectorAll('button'));
     console.log('Found buttons:', buttons);
     
-    // Map button labels to command names
-    const buttonCommandMap: Record<string, string> = {};
-    this.buttonDefinitions.forEach(def => {
-      buttonCommandMap[def.label] = def.command;
-    });
-    
-    // Also map lowercase versions of labels
-    for (const label in buttonCommandMap) {
-      buttonCommandMap[label.toLowerCase()] = buttonCommandMap[label];
-    }
-    
     buttons.forEach(button => {
-      const text = button.textContent?.trim() || '';
-      const command = buttonCommandMap[text] || buttonCommandMap[text.toLowerCase()];
-      
-      if (command) {
-        console.log(`Attaching direct event to ${text} button for command ${command}`);
+      const text = button.textContent?.trim();
+      if (text === 'B') {
         button.addEventListener('click', (e) => {
           e.preventDefault();
-          e.stopPropagation();
-          console.log(`${text} button clicked directly, executing ${command}`);
-          this.executeCommand(command);
+          console.log('Bold button clicked directly, executing bold');
+          this.executeBold();
         });
-      } else {
-        console.warn(`No command found for button: ${text}`);
+      } else if (text === 'I') {
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Italic button clicked directly, executing italic');
+          this.executeItalic();
+        });
+      } else if (text === 'U') {
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Underline button clicked directly, executing underline');
+          this.executeUnderline();
+        });
       }
     });
   }
 
   createToolbar(): VNode[] {
     console.log('Creating toolbar buttons');
-    
-    // Create buttons based on button definitions
-    return this.buttonDefinitions.map(def => {
-      const button = createButton(def.label, (e) => {
+    return [
+      createButton('B', (e) => {
         e.preventDefault();
-        e.stopPropagation();
-        console.log(`${def.label} button clicked via virtual DOM, executing ${def.command}`);
-        this.executeCommand(def.command);
-      }, def.title || '');
-      
-      // Add a data attribute with the exact command name to help with debugging
-      button.props['data-command-exact'] = def.command;
-      
-      return button;
-    });
+        console.log('Bold button clicked via virtual DOM');
+        this.executeBold();
+      }),
+      createButton('I', (e) => {
+        e.preventDefault();
+        console.log('Italic button clicked via virtual DOM');
+        this.executeItalic();
+      }),
+      createButton('U', (e) => {
+        e.preventDefault();
+        console.log('Underline button clicked via virtual DOM');
+        this.executeUnderline();
+      })
+    ];
+  }
+
+  // Get keyboard shortcuts for the editor
+  getKeyboardShortcuts(): { [key: string]: string } {
+    return this.keyboardShortcuts;
+  }
+
+  // Execute a command by name
+  executeCommand(commandName: string): void {
+    console.log(`Executing command: ${commandName}`);
+    
+    // Map command names to their respective methods
+    switch(commandName.toLowerCase()) {
+      case 'bold':
+        this.executeBold();
+        break;
+      case 'italic':
+        this.executeItalic();
+        break;
+      case 'underline':
+        this.executeUnderline();
+        break;
+      default:
+        console.warn(`Command not found: ${commandName}`);
+    }
   }
 
   destroy(): void {
-    // Don't empty the commands object as it might be needed by other code
-    // Instead, just log that we're destroying the plugin
-    console.log('TextFormattingPlugin being destroyed');
+    this.commands = {};
   }
 
   private toggleFormat(tag: string): void {
@@ -205,8 +219,29 @@ export class TextFormattingPlugin implements Plugin {
         this.unwrapFormat(range, tag);
       } else {
         console.log(`Format ${tag} is not active, applying it`);
+        // Create the proper element for the formatting
         const element = document.createElement(tag);
-        range.surroundContents(element);
+        
+        // For em tag, ensure proper styling
+        if (tag === 'em') {
+          element.style.fontStyle = 'italic';
+        }
+        
+        // Apply the formatting
+        try {
+          range.surroundContents(element);
+        } catch (error) {
+          console.error('Error applying format with surroundContents:', error);
+          
+          // Use a more robust approach for complex selections
+          const fragment = range.extractContents();
+          element.appendChild(fragment);
+          range.insertNode(element);
+          
+          // Restore selection
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
       }
     } catch (error) {
       console.error('Error applying format:', error);
@@ -214,11 +249,23 @@ export class TextFormattingPlugin implements Plugin {
       // Fallback approach for complex selections
       const documentFragment = range.extractContents();
       const element = document.createElement(tag);
+      
+      // For em tag, ensure proper styling
+      if (tag === 'em') {
+        element.style.fontStyle = 'italic';
+      }
+      
       element.appendChild(documentFragment);
       range.insertNode(element);
       
       // Cleanup empty format elements
       this.cleanupEmptyNodes(this.editor);
+      
+      // Restore selection after modification
+      const newRange = document.createRange();
+      newRange.selectNodeContents(element);
+      selection.removeAllRanges();
+      selection.addRange(newRange);
     }
   }
 
@@ -227,10 +274,28 @@ export class TextFormattingPlugin implements Plugin {
     if (!selection?.rangeCount) return false;
     
     let node: Node | null = selection.anchorNode;
+    
+    // Check for text node
+    if (node && node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode;
+    }
+    
     while (node && node !== this.editor) {
-      if (node.nodeType === Node.ELEMENT_NODE && 
-          (node as Element).tagName.toLowerCase() === tagName.toLowerCase()) {
-        return true;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        // Check for exact tag match
+        if (element.tagName.toLowerCase() === tagName.toLowerCase()) {
+          return true;
+        }
+        
+        // Special case for italic - check for both 'em' and 'i' tags or style
+        if (tagName.toLowerCase() === 'i' || tagName.toLowerCase() === 'em') {
+          if (element.tagName.toLowerCase() === 'i' || 
+              element.tagName.toLowerCase() === 'em' ||
+              window.getComputedStyle(element).fontStyle === 'italic') {
+            return true;
+          }
+        }
       }
       node = node.parentNode;
     }
@@ -240,24 +305,59 @@ export class TextFormattingPlugin implements Plugin {
   private unwrapFormat(range: Range, tagName: string): void {
     let node: Node | null = range.commonAncestorContainer;
     
+    // If text node, get parent
+    if (node && node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode;
+    }
+    
     // Find the formatting element
+    let targetElement: Element | null = null;
+    
     while (node && node !== this.editor) {
-      if (node.nodeType === Node.ELEMENT_NODE && 
-          (node as Element).tagName.toLowerCase() === tagName.toLowerCase()) {
-        break;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as Element;
+        if (element.tagName.toLowerCase() === tagName.toLowerCase()) {
+          targetElement = element;
+          break;
+        }
+        
+        // Special case for italic
+        if (tagName.toLowerCase() === 'em' && 
+            (element.tagName.toLowerCase() === 'i' || 
+             window.getComputedStyle(element).fontStyle === 'italic')) {
+          targetElement = element;
+          break;
+        }
       }
       node = node.parentNode;
     }
     
-    if (node && node !== this.editor) {
-      const parent = node.parentNode;
+    if (targetElement && targetElement !== this.editor) {
+      const parent = targetElement.parentNode;
       if (parent) {
-        // Move all children out
-        while (node.firstChild) {
-          parent.insertBefore(node.firstChild, node);
+        // Create a document fragment to hold all children
+        const fragment = document.createDocumentFragment();
+        
+        // Move all children to the fragment
+        while (targetElement.firstChild) {
+          fragment.appendChild(targetElement.firstChild);
         }
+        
+        // Insert the fragment before the target element
+        parent.insertBefore(fragment, targetElement);
+        
         // Remove the empty formatting element
-        parent.removeChild(node);
+        parent.removeChild(targetElement);
+        
+        // Restore selection
+        const selection = window.getSelection();
+        if (selection) {
+          const newRange = document.createRange();
+          newRange.setStart(range.startContainer, range.startOffset);
+          newRange.setEnd(range.endContainer, range.endOffset);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
       }
     }
   }
@@ -268,7 +368,9 @@ export class TextFormattingPlugin implements Plugin {
       NodeFilter.SHOW_ELEMENT,
       {
         acceptNode: function(node) {
-          return (node.childNodes.length === 0) ? 
+          // Check if the node is empty (no text or only whitespace)
+          return (node.textContent?.trim() === '' && 
+                 node.childNodes.length === 0) ? 
             NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
         }
       }
@@ -284,7 +386,9 @@ export class TextFormattingPlugin implements Plugin {
     
     // Remove empty nodes
     emptyNodes.forEach(node => {
-      if (node.parentNode) {
+      if (node.parentNode && 
+          node !== this.editor && 
+          !this.editor.isEqualNode(node)) {
         node.parentNode.removeChild(node);
       }
     });

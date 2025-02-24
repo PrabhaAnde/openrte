@@ -1,39 +1,38 @@
 import { h, VNode } from '../core/virtualDom';
 
-// Stored event handlers to prevent garbage collection
-const buttonHandlers: {[key: string]: (e: MouseEvent) => void} = {};
-
-export function createButton(label: string, onClick: (e: MouseEvent) => void): VNode {
-  // Create a unique key for this handler
-  const handlerId = `btn_${label}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+export function createButton(label: string, onClick: (e: MouseEvent) => void, title?: string): VNode {
+  // Create a unique identifier for this button
+  const buttonId = `btn_${label}_${Math.floor(Math.random() * 10000)}`;
   
-  // Store the handler in our global object to prevent garbage collection
-  buttonHandlers[handlerId] = (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log(`Button ${label} clicked`, e);
-    onClick(e);
-  };
+  // Determine command name from label (lowercase)
+  const command = typeof label === 'string' ? label.toLowerCase() : '';
   
-  // Add an attribute to help with debugging
+  // Create the button with explicit event handler
   return h('button', { 
     type: 'button',
-    class: `openrte-button openrte-button-${label.toLowerCase()}`,
-    'data-handler-id': handlerId,
-    // Set up the click handler
-    onclick: buttonHandlers[handlerId],
-    // Add inline styles to ensure button is visible
+    class: `openrte-button openrte-button-${command}`,
+    title: title || label, // Add tooltip
+    'data-command': command, // Add data attribute for command identification
+    id: buttonId, // Add unique ID for debugging
+    // We need to use the DOM event name format
+    onclick: (e: MouseEvent) => {
+      // Prevent default to avoid any form submissions
+      e.preventDefault();
+      console.log(`Button ${label} clicked`, e);
+      // Call the actual handler
+      onClick(e);
+    },
+    // Add some styling directly to ensure it's visible
     style: `
-      margin: 4px;
-      padding: 6px 10px;
-      border: 1px solid #ccc;
-      background-color: #f0f0f0;
+      margin: 2px; 
+      padding: 4px 8px; 
+      border: 1px solid #ccc; 
+      background: #fff; 
+      color: #333;
       cursor: pointer;
       border-radius: 3px;
       font-weight: bold;
       min-width: 30px;
-      color: #333;
-      font-size: 14px;
     `
   }, [label]);
 }

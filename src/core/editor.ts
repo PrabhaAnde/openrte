@@ -18,9 +18,8 @@ export class Editor {
     console.log('Editor constructor called with element:', element);
     this.container = element;
     
-    // Apply container class and force full width
+    // Apply container class
     this.container.classList.add('openrte-container');
-    this.applyContainerStyles();
     
     this.selectionManager = new SelectionManager(element);
     
@@ -41,11 +40,6 @@ export class Editor {
     // Store reference to content element for direct access
     this.contentElement = element.querySelector('.openrte-content');
     
-    // Apply direct styles to ensure proper appearance
-    if (this.contentElement) {
-      this.applyContentStyles(this.contentElement as HTMLElement);
-    }
-    
     // Initialize event listeners
     this.initializeEventListeners();
     
@@ -55,38 +49,39 @@ export class Editor {
     }, 0);
   }
   
-  private applyContainerStyles(): void {
-    // Apply styles directly to the container
-    Object.assign(this.container.style, {
-      width: '100%',
-      minHeight: '300px',
-      display: 'flex',
-      flexDirection: 'column',
-      boxSizing: 'border-box'
-    });
+  // Command mapping for different representations
+  private getCommandMap(): Record<string, string> {
+    return {
+      'b': 'bold',
+      'i': 'italic',
+      'u': 'underline',
+      'bold': 'bold',
+      'italic': 'italic',
+      'underline': 'underline',
+      'Bold': 'bold',
+      'Italic': 'italic',
+      'Underline': 'underline',
+    };
   }
   
-  private applyContentStyles(element: HTMLElement): void {
-    // Apply styles directly to the content area
-    Object.assign(element.style, {
-      minHeight: '200px',
-      height: '300px',
-      padding: '16px',
-      fontFamily: 'sans-serif',
-      lineHeight: '1.5',
-      flexGrow: '1',
-      overflowY: 'auto',
-      border: 'none',
-      outline: 'none',
-      backgroundColor: 'white',
-      color: '#333' // Explicitly set text color
-    });
+  // Centralized keyboard shortcuts definition
+  private getKeyboardShortcuts(): Record<string, string> {
+    // First get shortcuts from plugins
+    const pluginShortcuts = this.formattingPlugin.getKeyboardShortcuts();
+    
+    // Then add/override with editor-specific shortcuts
+    const editorShortcuts: Record<string, string> = {
+      // Add any editor-specific shortcuts here
+    };
+    
+    // Combine shortcuts with plugin shortcuts taking precedence
+    return { ...pluginShortcuts, ...editorShortcuts };
   }
   
   private ensureContent(): void {
     if (this.contentElement && !this.contentElement.innerHTML.trim()) {
       const p = document.createElement('p');
-      p.style.color = '#333'; // Explicitly set paragraph text color
+      p.style.color = '#333'; // Ensure text is visible
       p.style.backgroundColor = 'transparent';
       p.innerHTML = '&nbsp;'; // Non-breaking space to ensure the paragraph has content
       this.contentElement.appendChild(p);
@@ -113,9 +108,6 @@ export class Editor {
       // Make sure the content area is editable
       (contentArea as HTMLElement).contentEditable = 'true';
       
-      // Add paste event listener to handle pasted content formatting
-      this.addEventHandler(contentArea as HTMLElement, 'paste', this.handlePaste);
-      
       console.log('Event listeners added to content area:', contentArea);
     } else {
       console.error('Content area not found for event listeners');
@@ -127,40 +119,55 @@ export class Editor {
     }, 100);
   }
   
-  private handlePaste = (event: ClipboardEvent): void => {
-    // Prevent the default paste behavior
-    event.preventDefault();
-    
-    // Get plain text from clipboard
-    const text = event.clipboardData?.getData('text/plain');
-    
-    if (text) {
-      // Insert the text at the current cursor position
-      document.execCommand('insertText', false, text);
-    }
-  };
-  
   private addDirectButtonListeners(): void {
     const buttons = this.container.querySelectorAll('button');
     
     buttons.forEach(button => {
-      const text = button.textContent?.trim();
+      const text = button.textContent?.trim() || '';
       
-      console.log('Adding direct event listener to button:', text);
+      // Get command from data attributes first, then from text content
+      let dataCommand = button.getAttribute('data-command');
+      let dataCommandExact = button.getAttribute('data-command-exact');
+      
+      console.log('Adding direct event listener to button:', text, 
+                  'data-command:', dataCommand,
+                  'data-command-exact:', dataCommandExact);
+      
+      // Use the most specific command available
+      const exactCommand = dataCommandExact || dataCommand || this.getCommandFromButtonText(text);
       
       button.addEventListener('click', (e) => {
         e.preventDefault();
-        console.log(`Button ${text} clicked directly`);
+        e.stopPropagation();
         
-        if (text === 'B') {
-          this.formattingPlugin.executeBold();
-        } else if (text === 'I') {
-          this.formattingPlugin.executeItalic();
-        } else if (text === 'U') {
-          this.formattingPlugin.executeUnderline();
+        console.log(`Button ${text} clicked directly, command: ${exactCommand}`);
+        if (exactCommand) {
+          // Try both the exact command and potentially a mapped version
+          const commandMap = this.getCommandMap();
+          const normalizedCommand = exactCommand in commandMap ? commandMap[exactCommand] : exactCommand;
+          
+          this.formattingPlugin.executeCommand(normalizedCommand);
+        } else {
+          console.warn(`No command found for button: ${text}`);
         }
       });
     });
+  }
+  
+  private getCommandFromButtonText(text: string): string | null {
+    const commandMap = this.getCommandMap();
+    
+    // First check if there's a direct mapping
+    if (text.toLowerCase() in commandMap) {
+      return commandMap[text.toLowerCase()];
+    }
+    
+    // Then check if it's a single letter that maps to a command
+    if (text.length === 1 && text.toLowerCase() in commandMap) {
+      return commandMap[text.toLowerCase()];
+    }
+    
+    return null;
   }
 
   private addEventHandler<K extends keyof HTMLElementEventMap>(
@@ -174,98 +181,44 @@ export class Editor {
   }
 
   private createEditorDOM(): VNode {
-    return h('div', { 
-      class: 'openrte-editor',
-      style: `
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        width: 100%;
-        min-width: 300px;
-        max-width: 100%;
-        margin: 0 auto;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        display: flex;
-        flex-direction: column;
-        background-color: #f8f8f8;
-      `
-    }, [
+    return h('div', { class: 'openrte-editor' }, [
       this.createToolbar(),
       this.createContentArea()
     ]);
   }
 
   private createToolbar(): VNode {
-    return h('div', { 
-      class: 'openrte-toolbar',
-      style: `
-        padding: 8px;
-        border-bottom: 1px solid #ddd;
-        display: flex;
-        gap: 4px;
-        background-color: #f8f8f8;
-        flex-shrink: 0;
-      `
-    }, this.formattingPlugin.createToolbar());
+    return h('div', { class: 'openrte-toolbar' }, 
+      this.formattingPlugin.createToolbar()
+    );
   }
 
   private createContentArea(): VNode {
     return h('div', { 
       class: 'openrte-content',
       contenteditable: 'true',
-      style: `
-        min-height: 200px;
-        height: 300px;
-        padding: 16px;
-        font-family: sans-serif;
-        line-height: 1.5;
-        flex-grow: 1;
-        overflow-y: auto;
-        border: none;
-        outline: none;
-        background-color: white;
-        color: #333;
-      `
+      style: 'min-height: 200px; height: 300px; padding: 16px; flex-grow: 1; overflow-y: auto; color: #333; background-color: white;'
     }, ['']);
   }
 
   private handleKeyDown = (event: KeyboardEvent): void => {
     if (event.ctrlKey || event.metaKey) {
-      switch(event.key.toLowerCase()) {
-        case 'b':
-          event.preventDefault();
-          console.log('Ctrl+B keyboard shortcut detected');
-          this.formattingPlugin.executeBold();
-          break;
-        case 'i':
-          event.preventDefault();
-          console.log('Ctrl+I keyboard shortcut detected');
-          this.formattingPlugin.executeItalic();
-          break;
-        case 'u':
-          event.preventDefault();
-          console.log('Ctrl+U keyboard shortcut detected');
-          this.formattingPlugin.executeUnderline();
-          break;
+      const key = event.key.toLowerCase();
+      const shortcuts = this.getKeyboardShortcuts();
+      
+      if (key in shortcuts) {
+        event.preventDefault();
+        const command = shortcuts[key];
+        console.log(`Keyboard shortcut detected: Ctrl+${key} -> ${command}`);
+        this.formattingPlugin.executeCommand(command);
       }
     }
   };
 
   private handleInput = (): void => {
-    // Fix any elements that might have been added with incorrect styling
-    this.fixTextStyling();
+    // No need to re-render on input, as we're working with contentEditable
     console.log('Input event detected');
   };
-  
-  private fixTextStyling(): void {
-    if (!this.contentElement) return;
-    
-    // Ensure all text elements have proper styling
-    const textElements = this.contentElement.querySelectorAll('p, div, span');
-    textElements.forEach(el => {
-      (el as HTMLElement).style.backgroundColor = 'transparent';
-      (el as HTMLElement).style.color = '#333';
-    });
-  }
 
   setContent(content: ContentModel): void {
     this.content = content;
@@ -276,7 +229,6 @@ export class Editor {
       // Implementation depends on content model serialization
       // For now, just a placeholder
       contentArea.innerHTML = JSON.stringify(content);
-      this.fixTextStyling();
     }
   }
 

@@ -18,7 +18,7 @@ export class Editor {
     console.log('Editor constructor called with element:', element);
     this.container = element;
     
-    // Apply container class and styles
+    // Apply container class and force full width
     this.container.classList.add('openrte-container');
     this.applyContainerStyles();
     
@@ -35,10 +35,13 @@ export class Editor {
     console.log('Patching container with editor VDOM');
     patch(element, this.vdom);
     
+    // Initialize plugins
+    this.plugins.forEach(plugin => plugin.init(this));
+    
     // Store reference to content element for direct access
     this.contentElement = element.querySelector('.openrte-content');
     
-    // Apply styles directly to ensure content area is visible
+    // Apply direct styles to ensure proper appearance
     if (this.contentElement) {
       this.applyContentStyles(this.contentElement as HTMLElement);
     }
@@ -49,10 +52,7 @@ export class Editor {
     // Insert initial paragraph if empty
     setTimeout(() => {
       this.ensureContent();
-      
-      // Initialize plugins after DOM is ready
-      this.plugins.forEach(plugin => plugin.init(this));
-    }, 100);
+    }, 0);
   }
   
   private applyContainerStyles(): void {
@@ -76,15 +76,18 @@ export class Editor {
       lineHeight: '1.5',
       flexGrow: '1',
       overflowY: 'auto',
-      border: '1px solid #ccc',
+      border: 'none',
       outline: 'none',
-      backgroundColor: 'white'
+      backgroundColor: 'white',
+      color: '#333' // Explicitly set text color
     });
   }
   
   private ensureContent(): void {
     if (this.contentElement && !this.contentElement.innerHTML.trim()) {
       const p = document.createElement('p');
+      p.style.color = '#333'; // Explicitly set paragraph text color
+      p.style.backgroundColor = 'transparent';
       p.innerHTML = '&nbsp;'; // Non-breaking space to ensure the paragraph has content
       this.contentElement.appendChild(p);
       
@@ -110,10 +113,54 @@ export class Editor {
       // Make sure the content area is editable
       (contentArea as HTMLElement).contentEditable = 'true';
       
+      // Add paste event listener to handle pasted content formatting
+      this.addEventHandler(contentArea as HTMLElement, 'paste', this.handlePaste);
+      
       console.log('Event listeners added to content area:', contentArea);
     } else {
       console.error('Content area not found for event listeners');
     }
+    
+    // Add direct event listeners to buttons
+    setTimeout(() => {
+      this.addDirectButtonListeners();
+    }, 100);
+  }
+  
+  private handlePaste = (event: ClipboardEvent): void => {
+    // Prevent the default paste behavior
+    event.preventDefault();
+    
+    // Get plain text from clipboard
+    const text = event.clipboardData?.getData('text/plain');
+    
+    if (text) {
+      // Insert the text at the current cursor position
+      document.execCommand('insertText', false, text);
+    }
+  };
+  
+  private addDirectButtonListeners(): void {
+    const buttons = this.container.querySelectorAll('button');
+    
+    buttons.forEach(button => {
+      const text = button.textContent?.trim();
+      
+      console.log('Adding direct event listener to button:', text);
+      
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log(`Button ${text} clicked directly`);
+        
+        if (text === 'B') {
+          this.formattingPlugin.executeBold();
+        } else if (text === 'I') {
+          this.formattingPlugin.executeItalic();
+        } else if (text === 'U') {
+          this.formattingPlugin.executeUnderline();
+        }
+      });
+    });
   }
 
   private addEventHandler<K extends keyof HTMLElementEventMap>(
@@ -134,11 +181,12 @@ export class Editor {
         border-radius: 4px;
         width: 100%;
         min-width: 300px;
-        max-width: 800px;
+        max-width: 100%;
         margin: 0 auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         display: flex;
         flex-direction: column;
+        background-color: #f8f8f8;
       `
     }, [
       this.createToolbar(),
@@ -175,6 +223,7 @@ export class Editor {
         border: none;
         outline: none;
         background-color: white;
+        color: #333;
       `
     }, ['']);
   }
@@ -202,9 +251,21 @@ export class Editor {
   };
 
   private handleInput = (): void => {
-    // No need to re-render on input, as we're working with contentEditable
+    // Fix any elements that might have been added with incorrect styling
+    this.fixTextStyling();
     console.log('Input event detected');
   };
+  
+  private fixTextStyling(): void {
+    if (!this.contentElement) return;
+    
+    // Ensure all text elements have proper styling
+    const textElements = this.contentElement.querySelectorAll('p, div, span');
+    textElements.forEach(el => {
+      (el as HTMLElement).style.backgroundColor = 'transparent';
+      (el as HTMLElement).style.color = '#333';
+    });
+  }
 
   setContent(content: ContentModel): void {
     this.content = content;
@@ -215,6 +276,7 @@ export class Editor {
       // Implementation depends on content model serialization
       // For now, just a placeholder
       contentArea.innerHTML = JSON.stringify(content);
+      this.fixTextStyling();
     }
   }
 

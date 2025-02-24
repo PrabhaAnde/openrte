@@ -3,11 +3,12 @@
   border-radius: 4px !important;
   width: 100% !important;
   min-width: 300px !important;
-  max-width: 800px !important;
+  max-width: 100% !important; /* Changed from 800px to 100% for full width */
   margin: 0 auto !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
   display: flex !important;
   flex-direction: column !important;
+  background-color: #f8f8f8 !important;
 }
 
 .openrte-container {
@@ -49,7 +50,7 @@
 
 .openrte-content {
   min-height: 200px !important;
-  height: 300px !important; /* Explicit height */
+  height: 300px !important;
   padding: 16px !important;
   font-family: sans-serif !important;
   line-height: 1.5 !important;
@@ -58,4 +59,37 @@
   border: none !important;
   outline: none !important;
   background-color: white !important;
+  color: #333 !important; /* Ensure text color is dark */
+}
+
+/* Fix for text appearing with gray background */
+.openrte-content p {
+  background-color: transparent !important;
+  color: #333 !important;
+  margin: 0 0 10px 0 !important;
+  padding: 0 !important;
+}
+
+/* Override any existing text styling */
+.openrte-content * {
+  background-color: transparent !important;
+  color: #333 !important;
+}
+
+/* Only exception is when text is actually formatted */
+.openrte-content strong,
+.openrte-content b {
+  font-weight: bold !important;
+  background-color: transparent !important;
+}
+
+.openrte-content em,
+.openrte-content i {
+  font-style: italic !important;
+  background-color: transparent !important;
+}
+
+.openrte-content u {
+  text-decoration: underline !important;
+  background-color: transparent !important;
 }

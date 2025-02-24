@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+      "target": "es2017",  // This enables Object.entries
+      "lib": ["dom", "es2017"],
+      // "target": "ES6",
+      "module": "ESNext",
+      "outDir": "./dist",
+      "rootDir": "./src",
+      "strict": true,
+      "moduleResolution": "node",
+      "esModuleInterop": true,
+      "declaration": true,
+      "jsx": "react" 
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist"]
+  }

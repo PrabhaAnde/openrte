@@ -160,3 +160,60 @@
 .openrte-strikethrough-button {
   text-decoration: line-through;
 }
+
+
+/* Dropdown styling */
+.openrte-format-dropdown,
+.openrte-spacing-dropdown {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background-color: white;
+  margin: 2px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Plugin container styles */
+.openrte-alignment-container,
+.openrte-lists-container,
+.openrte-indentation-container {
+  display: flex;
+  margin: 0 2px;
+}
+
+/* Button group styles */
+.openrte-alignment-container .openrte-button,
+.openrte-lists-container .openrte-button,
+.openrte-indentation-container .openrte-button {
+  margin: 0 1px;
+}
+
+/* Button icons */
+.openrte-align-left-button,
+.openrte-align-center-button,
+.openrte-align-right-button,
+.openrte-align-justify-button,
+.openrte-ol-button,
+.openrte-ul-button,
+.openrte-indent-button,
+.openrte-outdent-button {
+  font-size: 16px;
+}
+
+/* Specific styles for alignment buttons */
+.openrte-align-left-button {
+  text-align: left;
+}
+
+.openrte-align-center-button {
+  text-align: center;
+}
+
+.openrte-align-right-button {
+  text-align: right;
+}
+
+.openrte-align-justify-button {
+  text-align: justify;
+}

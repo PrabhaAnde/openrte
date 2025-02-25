@@ -90,25 +90,27 @@ export class Editor {
   
   private handleKeyDown = (event: KeyboardEvent): void => {
     // Will handle keyboard shortcuts later with plugins
-    console.log('Key down:', event.key);
+    // console.log('Key down:', event.key);
   };
   
   private handleInput = (): void => {
     // Handle content changes
-    console.log('Content changed');
+    // console.log('Content changed');
   };
   
   private handleFocus = (): void => {
-    console.log('Editor focused');
+    // console.log('Editor focused');
   };
   
   private handleBlur = (): void => {
-    console.log('Editor blurred');
+    // console.log('Editor blurred');
   };
   
   // Plugin management
   registerPlugin(plugin: Plugin): void {
     this.pluginRegistry.register(plugin);
+    // Ensure plugin is properly initialized with editor instance
+    plugin.init(this); // Make sure this line exists
     this.toolbar.appendChild(plugin.createToolbarControl());
   }
   

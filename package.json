@@ -4,7 +4,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "examples"
   ],
   "directories": {
     "doc": "docs",
@@ -36,9 +37,5 @@
     ".": "./dist/index.js",
     "./react": "./dist/adapters/react/index.js",
     "./styles": "./dist/styles/editor.css"
-  },
-  "files": [
-  "dist",
-  "examples"
-  ]
+  }
 }

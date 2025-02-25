@@ -1,19 +1,20 @@
+// src/plugins/textFormatting/index.ts
 import { Plugin } from '../../core/plugin';
 import { Editor } from '../../core/editor';
 import { createButton } from '../../ui/button';
-import { VNode } from '../../core/virtualDom';
 import { SelectionManager } from '../../core/selection';
 
 export class TextFormattingPlugin implements Plugin {
   protected commands: { [key: string]: () => void };
   private editor: HTMLElement;
   private selectionManager: SelectionManager;
+  private buttons: HTMLButtonElement[] = [];
 
   constructor(editor: HTMLElement) {
     this.editor = editor;
     this.selectionManager = new SelectionManager(editor);
     
-    // Define commands with bound this context to avoid issues
+    // Define commands with bound this context
     this.commands = {
       bold: this.toggleFormat.bind(this, 'strong'),
       italic: this.toggleFormat.bind(this, 'em'),
@@ -23,7 +24,7 @@ export class TextFormattingPlugin implements Plugin {
     console.log('TextFormattingPlugin constructor completed');
   }
 
-  // Add public methods to access protected commands
+  // Public methods to access commands
   public executeBold(): void {
     console.log('executeBold called');
     this.commands.bold();
@@ -40,82 +41,42 @@ export class TextFormattingPlugin implements Plugin {
   }
 
   init(editor: Editor): void {
-    // Initialize plugin
     console.log('TextFormattingPlugin initialized with editor', editor);
-    
-    // Add direct event listeners to ensure they work
-    // We'll add them when the editor mounts
-    setTimeout(() => {
-      this.attachDirectEventListeners();
-    }, 100);
   }
 
-  private attachDirectEventListeners(): void {
-    // Find the buttons by their text/labels
-    const buttons = Array.from(this.editor.querySelectorAll('button'));
-    console.log('Found buttons:', buttons);
-    
-    buttons.forEach(button => {
-      const title = button.getAttribute('title');
-      if (title === 'Bold') {
-        console.log('Attaching direct event to Bold button');
-        button.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Bold button clicked directly');
-          this.executeBold();
-        });
-      } else if (title === 'Italic') {
-        console.log('Attaching direct event to Italic button');
-        button.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Italic button clicked directly');
-          this.executeItalic();
-        });
-      } else if (title === 'Underline') {
-        console.log('Attaching direct event to Underline button');
-        button.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Underline button clicked directly');
-          this.executeUnderline();
-        });
-      }
+  createToolbar(container: HTMLElement): void {
+    // Create buttons and append directly to the container
+    const boldButton = createButton('B', (e) => {
+      e.preventDefault();
+      console.log('Bold button clicked');
+      this.executeBold();
     });
-  }
-
-  createToolbar(): VNode[] {
-    console.log('Creating toolbar buttons');
-    return [
-      createButton('Bold', (e) => {
-        e.preventDefault();
-        console.log('Bold button clicked via virtual DOM');
-        this.executeBold();
-      }, {
-        icon: 'bold',
-        title: 'Bold',
-        className: 'openrte-button-bold'
-      }),
-      createButton('Italic', (e) => {
-        e.preventDefault();
-        console.log('Italic button clicked via virtual DOM');
-        this.executeItalic();
-      }, {
-        icon: 'italic',
-        title: 'Italic',
-        className: 'openrte-button-italic'
-      }),
-      createButton('Underline', (e) => {
-        e.preventDefault();
-        console.log('Underline button clicked via virtual DOM');
-        this.executeUnderline();
-      }, {
-        icon: 'underline',
-        title: 'Underline',
-        className: 'openrte-button-underline'
-      })
-    ];
+    
+    const italicButton = createButton('I', (e) => {
+      e.preventDefault();
+      console.log('Italic button clicked');
+      this.executeItalic();
+    });
+    
+    const underlineButton = createButton('U', (e) => {
+      e.preventDefault();
+      console.log('Underline button clicked');
+      this.executeUnderline();
+    });
+    
+    // Store references to buttons
+    this.buttons = [boldButton, italicButton, underlineButton];
+    
+    // Append buttons to container
+    this.buttons.forEach(button => container.appendChild(button));
   }
 
   destroy(): void {
+    // Clean up event listeners
+    this.buttons.forEach(button => {
+      button.removeEventListener('click', () => {});
+    });
+    this.buttons = [];
     this.commands = {};
   }
 

@@ -1,111 +1,81 @@
-import React, { useEffect, useRef } from 'react';
+// src/adapters/react/index.tsx
+import React, { useEffect, useRef, useState } from 'react';
 import { Editor } from '../../core/editor';
 import { ContentModel } from '../../types/contentModel';
 
 interface OpenRTEProps {
   initialContent?: ContentModel;
   onChange?: (content: ContentModel) => void;
-  onFocus?: () => void;
-  onBlur?: () => void;
-  autoFocus?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-  height?: string | number;
+  onHtmlChange?: (html: string) => void;
 }
 
-// React component for the rich text editor
 export const OpenRTE: React.FC<OpenRTEProps> = ({ 
   initialContent, 
-  onChange, 
-  onFocus, 
-  onBlur, 
-  autoFocus,
-  className = '',
-  style = {},
-  height = '300px'
+  onChange,
+  onHtmlChange 
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const editorInstance = useRef<Editor | null>(null);
+  const [isReady, setIsReady] = useState<boolean>(false);
 
+  // Initialize editor on mount
   useEffect(() => {
-    if (editorRef.current) {
+    if (editorRef.current && !editorInstance.current) {
       editorInstance.current = new Editor(editorRef.current);
-
+      
       if (initialContent) {
         editorInstance.current.setContent(initialContent);
       }
-
-      // Set focus if autoFocus is true
-      if (autoFocus && editorRef.current) {
-        const contentArea = editorRef.current.querySelector('.openrte-content');
-        if (contentArea) {
-          (contentArea as HTMLElement).focus();
-        }
-      }
-    }
-
-    // Log to verify initialization
-    console.log('Editor initialized:', editorInstance.current);
-
-    return () => {
-      // Clean up
-      editorInstance.current?.destroy();
-    };
-  }, [initialContent, autoFocus]);
-
-  // Set up event handlers for focus/blur
-  useEffect(() => {
-    const contentArea = editorRef.current?.querySelector('.openrte-content');
-    if (contentArea) {
-      if (onFocus) {
-        contentArea.addEventListener('focus', onFocus);
-      }
-      if (onBlur) {
-        contentArea.addEventListener('blur', onBlur);
-      }
+      
+      setIsReady(true);
+      console.log('Editor initialized:', editorInstance.current);
     }
 
     return () => {
-      // Clean up event listeners
-      if (contentArea) {
-        if (onFocus) {
-          contentArea.removeEventListener('focus', onFocus);
-        }
-        if (onBlur) {
-          contentArea.removeEventListener('blur', onBlur);
-        }
+      if (editorInstance.current) {
+        editorInstance.current.destroy();
+        editorInstance.current = null;
       }
     };
-  }, [onFocus, onBlur]);
+  }, []);
 
-  // Set up content change detection
+  // Handle content changes
   useEffect(() => {
-    if (onChange && editorRef.current) {
-      const contentArea = editorRef.current.querySelector('.openrte-content');
-      if (contentArea) {
-        const handleChange = () => {
-          if (editorInstance.current) {
-            onChange(editorInstance.current.getContent());
+    if (isReady && editorInstance.current) {
+      // Set up a mutation observer to detect changes
+      const contentElement = editorRef.current?.querySelector('.openrte-content');
+      
+      if (contentElement && (onChange || onHtmlChange)) {
+        const observer = new MutationObserver(() => {
+          const editor = editorInstance.current;
+          if (editor) {
+            if (onChange) {
+              onChange(editor.getContent());
+            }
+            if (onHtmlChange) {
+              onHtmlChange(editor.getHtml());
+            }
           }
-        };
+        });
         
-        contentArea.addEventListener('input', handleChange);
+        observer.observe(contentElement, { 
+          childList: true, 
+          subtree: true, 
+          characterData: true,
+          attributes: true
+        });
         
-        return () => {
-          contentArea.removeEventListener('input', handleChange);
-        };
+        return () => observer.disconnect();
       }
     }
-  }, [onChange]);
+  }, [isReady, onChange, onHtmlChange]);
 
-  return (
-    <div 
-      ref={editorRef} 
-      className={`openrte-container ${className}`}
-      style={{
-        ...style,
-        height: typeof height === 'number' ? `${height}px` : height
-      }} 
-    />
-  );
+  // Update content when initialContent changes
+  useEffect(() => {
+    if (isReady && editorInstance.current && initialContent) {
+      editorInstance.current.setContent(initialContent);
+    }
+  }, [initialContent, isReady]);
+
+  return <div ref={editorRef} className="openrte-container" />;
 };

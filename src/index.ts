@@ -33,14 +33,30 @@ import {
   SpecialCharactersPlugin
 } from './plugins';
 
+// Export React adapter
+import OpenRTEReact, { EditorHandle as ReactEditorHandle, OpenRTEProps } from './adapters/react';
+
+// Export Vanilla JS wrapper
+import { OpenRTEVanilla, OpenRTEConfig } from './adapters/vanilla';
+
 // Re-export core classes
 export { Editor } from './core/editor';
 export { Plugin } from './types/plugin';
 export { BasePlugin } from './plugins/base-plugin';
 export { SelectionManager } from './core/selection-manager';
 
+// Re-export React-specific types
+export type EditorHandle = ReactEditorHandle;
+export { OpenRTEProps };
+
+// Re-export Vanilla JS-specific types
+export { OpenRTEConfig };
+
 // Export plugins
 export * from './plugins';
+
+// Export adapters
+export { OpenRTEReact, OpenRTEVanilla };
 
 // Create and return editor instance with default plugins
 export function createEditor(element: HTMLElement): Editor {
@@ -77,3 +93,10 @@ export function createEditor(element: HTMLElement): Editor {
   
   return editor;
 }
+
+// Default export for easier importing
+export default {
+  createEditor,
+  OpenRTEReact,
+  OpenRTEVanilla
+};

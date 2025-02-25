@@ -555,14 +555,6 @@ Insert features (tables, images, links) should:
 3. Support editing of inserted elements
 4. Manage focus appropriately after insertion
 
-## Migration Strategy
-
-1. **Create Core Architecture** - Implement the base editor, plugin system, and selection manager first
-2. **Start with Simple Plugins** - Implement basic formatting features (bold, italic, etc.) first
-3. **Remove Virtual DOM** - Replace all virtual DOM code with direct DOM manipulation
-4. **Feature-by-Feature Migration** - Migrate each feature from the plain JS implementation one at a time
-5. **Testing** - Test each feature independently before moving to the next
-
 ## Conclusion
 
 This architecture plan provides a clear path to restructure the OpenRTE codebase into a more modular, maintainable system. By focusing on feature-specific plugins and direct DOM manipulation, the codebase will be easier to extend and maintain. The implementation can be done incrementally, allowing for continuous testing and refinement throughout the development process.

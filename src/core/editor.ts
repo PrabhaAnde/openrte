@@ -1,53 +1,60 @@
-// src/core/editor.ts
-import { TextFormattingPlugin } from '../plugins/textFormatting';
-import { SelectionManager } from './selection';
-import { ContentModel } from '../types/contentModel';
-import { Plugin } from './plugin';
-import { serializeToHtml } from './serializer';
+import { PluginRegistry } from './plugin-registry';
+import { SelectionManager } from './selection-manager';
+import { Plugin } from '../types/plugin';
 
 export class Editor {
   private container: HTMLElement;
-  private content: ContentModel = { type: 'document', parent: null, children: [] };
-  private plugins: Plugin[];
+  private contentArea!: HTMLElement;
+  private toolbar!: HTMLElement;
+  private pluginRegistry: PluginRegistry;
   private selectionManager: SelectionManager;
-  private formattingPlugin: TextFormattingPlugin;
   private eventListeners: { element: EventTarget; type: string; listener: EventListener }[] = [];
-  private contentElement: HTMLElement | null = null;
-  private toolbarElement: HTMLElement | null = null;
-
+  
   constructor(element: HTMLElement) {
-    console.log('Editor constructor called with element:', element);
     this.container = element;
+    this.pluginRegistry = new PluginRegistry();
     
-    // Apply container class
-    this.container.classList.add('openrte-container');
-    
-    this.selectionManager = new SelectionManager(element);
-    
-    // Initialize plugins
-    this.formattingPlugin = new TextFormattingPlugin(element);
-    this.plugins = [this.formattingPlugin];
-    
-    // Create DOM structure
+    // Create editor DOM structure
     this.createEditorDOM();
     
-    // Initialize plugins
-    this.plugins.forEach(plugin => plugin.init(this));
+    // Initialize selection manager
+    this.selectionManager = new SelectionManager(this.contentArea);
     
-    // Initialize event listeners
-    this.initializeEventListeners();
+    // Set up event listeners
+    this.setupEventListeners();
+  }
+  
+  private createEditorDOM(): void {
+    // Clear container first
+    this.container.innerHTML = '';
+    
+    // Create main editor container
+    const editorElement = document.createElement('div');
+    editorElement.className = 'openrte-editor';
+    
+    // Create toolbar
+    this.toolbar = document.createElement('div');
+    this.toolbar.className = 'openrte-toolbar';
+    
+    // Create content area
+    this.contentArea = document.createElement('div');
+    this.contentArea.className = 'openrte-content';
+    this.contentArea.contentEditable = 'true';
+    
+    // Append elements to DOM
+    editorElement.appendChild(this.toolbar);
+    editorElement.appendChild(this.contentArea);
+    this.container.appendChild(editorElement);
     
     // Insert initial paragraph if empty
-    setTimeout(() => {
-      this.ensureContent();
-    }, 0);
+    this.ensureContent();
   }
   
   private ensureContent(): void {
-    if (this.contentElement && !this.contentElement.innerHTML.trim()) {
+    if (!this.contentArea.innerHTML.trim()) {
       const p = document.createElement('p');
       p.innerHTML = '&nbsp;'; // Non-breaking space to ensure the paragraph has content
-      this.contentElement.appendChild(p);
+      this.contentArea.appendChild(p);
       
       // Place cursor in the paragraph
       const selection = window.getSelection();
@@ -60,17 +67,17 @@ export class Editor {
       }
     }
   }
-
-  private initializeEventListeners(): void {
-    if (this.contentElement) {
-      this.addEventHandler(this.contentElement, 'keydown', this.handleKeyDown);
-      this.addEventHandler(this.contentElement, 'input', this.handleInput);
-      console.log('Event listeners added to content area:', this.contentElement);
-    } else {
-      console.error('Content area not found for event listeners');
-    }
+  
+  private setupEventListeners(): void {
+    // Add event listeners to the content area
+    this.addEventHandler(this.contentArea, 'keydown', this.handleKeyDown);
+    this.addEventHandler(this.contentArea, 'input', this.handleInput);
+    
+    // Add focus and blur handlers
+    this.addEventHandler(this.contentArea, 'focus', this.handleFocus);
+    this.addEventHandler(this.contentArea, 'blur', this.handleBlur);
   }
-
+  
   private addEventHandler<K extends keyof HTMLElementEventMap>(
     element: HTMLElement,
     type: K,
@@ -80,100 +87,66 @@ export class Editor {
     element.addEventListener(type, listener);
     this.eventListeners.push({ element, type, listener });
   }
-
-  private createEditorDOM(): void {
-    // Clear container first
-    this.container.innerHTML = '';
-    
-    // Create main editor container
-    const editorElement = document.createElement('div');
-    editorElement.className = 'openrte-editor';
-    
-    // Create toolbar
-    this.toolbarElement = document.createElement('div');
-    this.toolbarElement.className = 'openrte-toolbar';
-    
-    // Create content area
-    this.contentElement = document.createElement('div');
-    this.contentElement.className = 'openrte-content';
-    this.contentElement.contentEditable = 'true';
-    this.contentElement.style.minHeight = '200px';
-    this.contentElement.style.height = '300px';
-    this.contentElement.style.padding = '16px';
-    this.contentElement.style.flexGrow = '1';
-    this.contentElement.style.overflowY = 'auto';
-    
-    // Add formatting buttons to toolbar
-    this.formattingPlugin.createToolbar(this.toolbarElement);
-    
-    // Append elements to DOM
-    editorElement.appendChild(this.toolbarElement);
-    editorElement.appendChild(this.contentElement);
-    this.container.appendChild(editorElement);
-  }
-
+  
   private handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.ctrlKey || event.metaKey) {
-      switch(event.key.toLowerCase()) {
-        case 'b':
-          event.preventDefault();
-          console.log('Ctrl+B keyboard shortcut detected');
-          this.formattingPlugin.executeBold();
-          break;
-        case 'i':
-          event.preventDefault();
-          console.log('Ctrl+I keyboard shortcut detected');
-          this.formattingPlugin.executeItalic();
-          break;
-        case 'u':
-          event.preventDefault();
-          console.log('Ctrl+U keyboard shortcut detected');
-          this.formattingPlugin.executeUnderline();
-          break;
-      }
-    }
+    // Will handle keyboard shortcuts later with plugins
+    console.log('Key down:', event.key);
   };
-
+  
   private handleInput = (): void => {
-    // Capture content changes here if needed
-    console.log('Input event detected');
-    // Could update this.content based on DOM content
+    // Handle content changes
+    console.log('Content changed');
   };
-
-  setContent(content: ContentModel): void {
-    this.content = content;
-    
-    if (this.contentElement) {
-      // Convert content model to HTML and set
-      const html = serializeToHtml(content);
-      this.contentElement.innerHTML = html;
-    }
+  
+  private handleFocus = (): void => {
+    console.log('Editor focused');
+  };
+  
+  private handleBlur = (): void => {
+    console.log('Editor blurred');
+  };
+  
+  // Plugin management
+  registerPlugin(plugin: Plugin): void {
+    this.pluginRegistry.register(plugin);
+    this.toolbar.appendChild(plugin.createToolbarControl());
   }
-
-  getContent(): ContentModel {
-    // In a real implementation, we would parse the DOM back to our content model
-    // For now, we'll just return the stored model
-    return this.content;
+  
+  // Selection management
+  getSelectionManager(): SelectionManager {
+    return this.selectionManager;
   }
-
-  getHtml(): string {
-    return this.contentElement ? this.contentElement.innerHTML : '';
+  
+  // Content area access
+  getContentArea(): HTMLElement {
+    return this.contentArea;
   }
-
+  
+  // Content management
+  getContent(): string {
+    return this.contentArea.innerHTML;
+  }
+  
+  setContent(html: string): void {
+    this.contentArea.innerHTML = html;
+    this.ensureContent();
+  }
+  
+  // Focus the editor
+  focus(): void {
+    this.contentArea.focus();
+  }
+  
+  // Editor destruction
   destroy(): void {
-    // Clean up plugins
-    this.plugins.forEach(plugin => plugin.destroy());
+    // Clean up all plugins
+    this.pluginRegistry.destroyAll();
     
     // Remove all event listeners
     this.eventListeners.forEach(({ element, type, listener }) => {
       element.removeEventListener(type, listener);
     });
     this.eventListeners = [];
-    
-    // Clear container
-    if (this.contentElement) {
-      this.contentElement.contentEditable = 'false';
-    }
     
     // Clear DOM
     this.container.innerHTML = '';

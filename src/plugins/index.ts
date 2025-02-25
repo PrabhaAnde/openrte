@@ -1,4 +1,7 @@
-// Export all plugins from a single file for easier imports
-export { TextFormattingPlugin } from './textFormatting';
-export { ParagraphFormattingPlugin } from './paragraphFormatting';
-export { TextSizePlugin } from './textSize';
+// src/plugins/index.ts
+export { BoldPlugin } from './bold';
+export { ItalicPlugin } from './italic';
+export { UnderlinePlugin } from './underline';
+export { StrikethroughPlugin } from './strikethrough';
+export { TextColorPlugin } from './text-color';
+export { HighlightPlugin } from './highlight';

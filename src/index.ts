@@ -1,10 +1,36 @@
-// src/index.ts
 import { Editor } from './core/editor';
-export { Editor } from './core/editor';
-export { OpenRTE } from './adapters/react';
 import './styles/editor.css';
-export type { ContentModel } from './types/contentModel';
+ // Register default plugins
+ import { 
+  BoldPlugin, 
+  ItalicPlugin, 
+  UnderlinePlugin, 
+  StrikethroughPlugin,
+  TextColorPlugin,
+  HighlightPlugin
+} from './plugins';
 
+// Re-export core classes
+export { Editor } from './core/editor';
+export { Plugin } from './types/plugin';
+export { BasePlugin } from './plugins/base-plugin';
+export { SelectionManager } from './core/selection-manager';
+
+// Export plugins
+export * from './plugins';
+
+// Create and return editor instance with default plugins
 export function createEditor(element: HTMLElement): Editor {
-  return new Editor(element);
+  const editor = new Editor(element);
+  
+ 
+  
+  editor.registerPlugin(new BoldPlugin());
+  editor.registerPlugin(new ItalicPlugin());
+  editor.registerPlugin(new UnderlinePlugin());
+  editor.registerPlugin(new StrikethroughPlugin());
+  editor.registerPlugin(new TextColorPlugin());
+  editor.registerPlugin(new HighlightPlugin());
+  
+  return editor;
 }

@@ -1,12 +1,12 @@
 import { Editor } from './core/editor';
 import './styles/editor.css';
 
-// Register default plugins
-import { 
+// Import all plugins
+import {
   // Text formatting plugins
-  BoldPlugin, 
-  ItalicPlugin, 
-  UnderlinePlugin, 
+  BoldPlugin,
+  ItalicPlugin,
+  UnderlinePlugin,
   StrikethroughPlugin,
   TextColorPlugin,
   HighlightPlugin,
@@ -16,7 +16,21 @@ import {
   ListsPlugin,
   IndentationPlugin,
   BlockFormatPlugin,
-  LineSpacingPlugin
+  LineSpacingPlugin,
+  
+  // Insert features plugins
+  LinkPlugin,
+  ImagePlugin,
+  TablePlugin,
+  HorizontalRulePlugin,
+  PageBreakPlugin,
+  
+  // Advanced features plugins
+  FontFamilyPlugin,
+  FontSizePlugin,
+  UndoRedoPlugin,
+  ClipboardPlugin,
+  SpecialCharactersPlugin
 } from './plugins';
 
 // Re-export core classes
@@ -46,6 +60,20 @@ export function createEditor(element: HTMLElement): Editor {
   editor.registerPlugin(new IndentationPlugin());
   editor.registerPlugin(new BlockFormatPlugin());
   editor.registerPlugin(new LineSpacingPlugin());
+  
+  // Register insert features plugins
+  editor.registerPlugin(new LinkPlugin());
+  editor.registerPlugin(new ImagePlugin());
+  editor.registerPlugin(new TablePlugin());
+  editor.registerPlugin(new HorizontalRulePlugin());
+  editor.registerPlugin(new PageBreakPlugin());
+  
+  // Register advanced features plugins
+  editor.registerPlugin(new FontFamilyPlugin());
+  editor.registerPlugin(new FontSizePlugin());
+  editor.registerPlugin(new UndoRedoPlugin());
+  editor.registerPlugin(new ClipboardPlugin());
+  editor.registerPlugin(new SpecialCharactersPlugin());
   
   return editor;
 }

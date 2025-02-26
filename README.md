@@ -38,8 +38,7 @@ const MyEditor = () => {
   );
 };
 
-export default MyEditor;
-```
+export default MyEditor;```
 
 ### Vanilla JavaScript
 
@@ -61,14 +60,13 @@ export default MyEditor;
     });
   </script>
 </body>
-</html>
-```
+</html>```
 
 ## API Reference
 
 ### React Component
 
-```typescript
+```jsx
 <OpenRTEReact
   // Content (controlled component)
   value={string}
@@ -93,8 +91,8 @@ export default MyEditor;
   // Events
   onFocus={() => void}
   onBlur={() => void}
-/>
-```
+/>```
+
 
 ### Vanilla JavaScript
 
@@ -185,6 +183,11 @@ OpenRTE supports all modern browsers:
 - Firefox
 - Safari
 - Edge
+
+## Keywords
+
+rich text editor, WYSIWYG editor, framework-agnostic editor, TypeScript editor, React rich text editor, Vue text editor, Angular rich text editor, JavaScript text editor, customizable editor, lightweight editor, HTML editor, content editor, web editor, WYSIWYG, text formatting, markdown alternative, plugin-based editor, modular editor, open source editor, MIT licensed editor, responsive editor, browser-based editor, content management, table editor, paragraph styling, editor with TypeScript support, no-dependency editor, JavaScript component, web component, frontend editor
+
 
 ## License
 

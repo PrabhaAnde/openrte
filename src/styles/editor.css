@@ -1,22 +1,64 @@
+/* Add CSS variables for theming */
+:root {
+  /* Light theme (default) */
+  --editor-bg: #ffffff;
+  --editor-text: #333333;
+  --editor-border: #dddddd;
+  --editor-border-hover: #bbbbbb;
+  --editor-toolbar-bg: #f8f8f8;
+  --editor-toolbar-hover: #f0f0f0;
+  --editor-toolbar-active: #e0e0e0;
+  --editor-content-bg: #ffffff;
+  --editor-shadow: rgba(0, 0, 0, 0.1);
+  --editor-button-bg: #ffffff;
+  --editor-button-border: #cccccc;
+  --editor-button-text: #333333;
+  --editor-dropdown-bg: #ffffff;
+  --editor-icon-color: #555555;
+}
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --editor-bg: #2d2d2d;
+    --editor-text: #e0e0e0;
+    --editor-border: #555555;
+    --editor-border-hover: #777777;
+    --editor-toolbar-bg: #333333;
+    --editor-toolbar-hover: #444444;
+    --editor-toolbar-active: #505050;
+    --editor-content-bg: #2d2d2d;
+    --editor-shadow: rgba(0, 0, 0, 0.3);
+    --editor-button-bg: #3d3d3d;
+    --editor-button-border: #555555;
+    --editor-button-text: #e0e0e0;
+    --editor-dropdown-bg: #3d3d3d;
+    --editor-icon-color: #dddddd;
+  }
+}
+
 /* Editor container */
 .openrte-editor {
-  border: 1px solid #ddd;
+  border: 1px solid var(--editor-border);
   border-radius: 4px;
   width: 100%;
   min-width: 300px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px var(--editor-shadow);
   display: flex;
   flex-direction: column;
   font-family: Arial, sans-serif;
+  background-color: var(--editor-bg);
+  color: var(--editor-text);
+  overflow: hidden; /* Prevent border overlapping */
 }
 
 /* Toolbar */
 .openrte-toolbar {
   padding: 8px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--editor-border);
   display: flex;
   gap: 4px;
-  background-color: #f8f8f8;
+  background-color: var(--editor-toolbar-bg);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -24,8 +66,9 @@
 /* Button styling */
 .openrte-button {
   padding: 4px 8px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border: 1px solid var(--editor-button-border);
+  background: var(--editor-button-bg);
+  color: var(--editor-button-text);
   cursor: pointer;
   border-radius: 3px;
   min-width: 30px;
@@ -37,16 +80,17 @@
 }
 
 .openrte-button:hover {
-  background-color: #f0f0f0;
+  background-color: var(--editor-toolbar-hover);
+  border-color: var(--editor-border-hover);
 }
 
 .openrte-button:active {
-  background-color: #e0e0e0;
+  background-color: var(--editor-toolbar-active);
 }
 
 .openrte-button.active {
-  background-color: #e0e0e0;
-  border-color: #aaa;
+  background-color: var(--editor-toolbar-active);
+  border-color: var(--editor-border-hover);
 }
 
 /* Content area */
@@ -59,6 +103,8 @@
   overflow-y: auto;
   border: none;
   outline: none;
+  background-color: var(--editor-content-bg);
+  color: var(--editor-text);
 }
 
 /* Content styling */
@@ -66,23 +112,27 @@
   font-size: 2em;
   margin-top: 0.67em;
   margin-bottom: 0.67em;
+  color: var(--editor-text);
 }
 
 .openrte-content h2 {
   font-size: 1.5em;
   margin-top: 0.83em;
   margin-bottom: 0.83em;
+  color: var(--editor-text);
 }
 
 .openrte-content h3 {
   font-size: 1.17em;
   margin-top: 1em;
   margin-bottom: 1em;
+  color: var(--editor-text);
 }
 
 .openrte-content p {
   margin-top: 1em;
   margin-bottom: 1em;
+  color: var(--editor-text);
 }
 
 .openrte-content ul {
@@ -101,7 +151,7 @@
 }
 
 .openrte-content blockquote {
-  border-left: 4px solid #ccc;
+  border-left: 4px solid var(--editor-border);
   padding-left: 16px;
   margin-left: 0;
   font-style: italic;
@@ -111,11 +161,11 @@
 
 /* Color picker styles */
 .openrte-color-picker {
-  background-color: white;
+  background-color: var(--editor-dropdown-bg);
   padding: 5px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--editor-border);
   border-radius: 3px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 5px var(--editor-shadow);
 }
 
 .openrte-color-grid {
@@ -126,7 +176,7 @@
 
 .openrte-color-cell {
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--editor-border);
   border-radius: 2px;
   margin: 2px;
   transition: transform 0.1s;
@@ -134,134 +184,16 @@
 
 .openrte-color-cell:hover {
   transform: scale(1.1);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px var(--editor-shadow);
 }
 
 /* Active button state */
 .openrte-button.active {
-  background-color: #e0e0e0;
-  border-color: #999;
+  background-color: var(--editor-toolbar-active);
+  border-color: var(--editor-border-hover);
 }
 
-/* Style overrides for specific buttons */
-.openrte-bold-button {
-  font-weight: bold;
-}
-
-.openrte-italic-button {
-  font-style: italic;
-}
-
-.openrte-underline-button {
-  text-decoration: underline;
-}
-
-.openrte-strikethrough-button {
-  text-decoration: line-through;
-}
-
-
-/* Dropdown styling */
-.openrte-format-dropdown,
-.openrte-spacing-dropdown {
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  background-color: white;
-  margin: 2px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-/* Plugin container styles */
-.openrte-alignment-container,
-.openrte-lists-container,
-.openrte-indentation-container {
-  display: flex;
-  margin: 0 2px;
-}
-
-/* Button group styles */
-.openrte-alignment-container .openrte-button,
-.openrte-lists-container .openrte-button,
-.openrte-indentation-container .openrte-button {
-  margin: 0 1px;
-}
-
-/* Button icons */
-.openrte-align-left-button,
-.openrte-align-center-button,
-.openrte-align-right-button,
-.openrte-align-justify-button,
-.openrte-ol-button,
-.openrte-ul-button,
-.openrte-indent-button,
-.openrte-outdent-button {
-  font-size: 16px;
-}
-
-/* Specific styles for alignment buttons */
-.openrte-align-left-button {
-  text-align: left;
-}
-
-.openrte-align-center-button {
-  text-align: center;
-}
-
-.openrte-align-right-button {
-  text-align: right;
-}
-
-.openrte-align-justify-button {
-  text-align: justify;
-}
-
-
-/* Link styles */
-.openrte-content a {
-  color: #0066cc;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.openrte-content a:hover {
-  text-decoration: none;
-}
-
-.openrte-link-button.active {
-  background-color: #e0e0e0;
-  border-color: #999;
-}
-
-/* Image styles */
-.openrte-content img {
-  max-width: 100%;
-  height: auto;
-  margin: 5px 0;
-}
-
-/* Table plugin styles */
-.openrte-table-dropdown {
-  position: absolute;
-  background-color: white;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  z-index: 1000;
-  padding: 5px 0;
-}
-
-.openrte-table-option {
-  padding: 8px 15px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.openrte-table-option:hover {
-  background-color: #f5f5f5;
-}
-
+/* Table styles - fix overlapping borders */
 .openrte-content table {
   border-collapse: collapse;
   width: 100%;
@@ -270,152 +202,78 @@
 
 .openrte-content table th, 
 .openrte-content table td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--editor-border);
   padding: 8px;
 }
 
 .openrte-content table th {
-  background-color: #f2f2f2;
+  background-color: var(--editor-toolbar-bg);
   font-weight: bold;
   text-align: left;
 }
 
 .openrte-content table tr:nth-child(even) {
-  background-color: #f9f9f9;
+  background-color: rgba(128, 128, 128, 0.05);
 }
 
-/* Horizontal rule styles */
-.openrte-content hr {
-  border: none;
-  border-top: 1px solid #ccc;
-  height: 1px;
-  margin: 10px 0;
+/* Icon styling */
+.openrte-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--editor-icon-color);
 }
 
-/* Page break styles */
-.openrte-page-break {
-  page-break-after: always;
-  break-after: page;
-  height: 0;
-  border-top: 1px dashed #bbb;
-  margin: 15px 0;
+.openrte-icon svg {
   width: 100%;
-  position: relative;
+  height: 100%;
+  fill: currentColor;
 }
 
-.openrte-page-break span {
-  display: block;
-  text-align: center;
-  font-size: 12px;
-  color: #999;
-  margin-top: -10px;
-  background: white;
-  width: 70px;
-  margin: -10px auto 0;
-}
-
-/* Print styles */
-@media print {
-  .openrte-page-break {
-    page-break-after: always;
-    break-after: page;
-    border: none;
-    margin: 0;
-  }
-  
-  .openrte-page-break span {
-    display: none;
-  }
-}
-
-/* Font Family and Font Size dropdowns */
+/* Dropdown styling */
+.openrte-format-dropdown,
+.openrte-spacing-dropdown,
 .openrte-font-family-dropdown,
 .openrte-font-size-dropdown {
   padding: 4px 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--editor-button-border);
   border-radius: 3px;
-  background-color: white;
+  background-color: var(--editor-button-bg);
+  color: var(--editor-button-text);
   margin: 2px;
   font-size: 14px;
   cursor: pointer;
-  min-width: 120px;
 }
 
-.openrte-font-family-dropdown option,
-.openrte-font-size-dropdown option {
-  padding: 5px;
+/* Fix for overlapping borders in controls area */
+.openrte-react-wrapper {
+  border: none;
+  overflow: hidden;
 }
 
-/* Undo/Redo styles */
-.openrte-undo-redo-container {
-  display: flex;
-  margin: 0 2px;
-}
-
-.openrte-undo-button,
-.openrte-redo-button {
-  font-size: 16px;
-}
-
-.openrte-undo-button:disabled,
-.openrte-redo-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Clipboard styles */
-.openrte-clipboard-container {
-  display: flex;
-  margin: 0 2px;
-}
-
-.openrte-cut-button,
-.openrte-copy-button,
-.openrte-paste-button {
-  font-size: 16px;
-}
-
-.openrte-cut-button:disabled,
-.openrte-copy-button:disabled,
-.openrte-paste-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Special Characters Dialog */
+/* Fix for special characters dialog */
 .openrte-special-chars-dialog {
-  background-color: white;
-  border: 1px solid #ccc;
+  background-color: var(--editor-dropdown-bg);
+  border: 1px solid var(--editor-border);
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  padding: 10px;
-  width: 300px;
-  max-height: 400px;
-  overflow-y: auto;
-  position: absolute;
-  z-index: 1000;
-}
-
-.openrte-special-chars-tabs {
-  display: flex;
-  border-bottom: 1px solid #ccc;
-  margin-bottom: 10px;
+  box-shadow: 0 2px 8px var(--editor-shadow);
+  color: var(--editor-text);
 }
 
 .openrte-special-chars-tab {
   padding: 5px 10px;
   cursor: pointer;
-  font-size: 14px;
+  border-bottom: 2px solid transparent;
 }
 
 .openrte-special-chars-tab:hover {
-  background-color: #f5f5f5;
+  background-color: var(--editor-toolbar-hover);
 }
 
-.openrte-special-chars-section {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
+.openrte-special-chars-tab.active {
+  border-bottom: 2px solid #0066cc;
 }
 
 .openrte-special-char-button {
@@ -426,60 +284,22 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border: 1px solid #ddd;
+  border: 1px solid var(--editor-button-border);
   border-radius: 3px;
-  background-color: #f8f8f8;
+  background-color: var(--editor-button-bg);
+  color: var(--editor-button-text);
 }
 
 .openrte-special-char-button:hover {
-  background-color: #e8e8e8;
-}
-
-/* Add to src/styles/editor.css */
-
-/* Icon styles */
-.openrte-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-}
-
-.openrte-icon svg {
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-}
-
-/* Button with icon styles */
-.openrte-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  height: 32px;
-  padding: 6px;
-  border: 1px solid #ccc;
-  background-color: #fff;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #333;
-}
-
-.openrte-button:hover {
-  background-color: #f0f0f0;
-}
-
-.openrte-button.active {
-  background-color: #e0e0e0;
-  border-color: #999;
-  color: #000;
+  background-color: var(--editor-toolbar-hover);
 }
 
 /* Focus style for accessibility */
-.openrte-button:focus {
+.openrte-button:focus,
+.openrte-format-dropdown:focus,
+.openrte-spacing-dropdown:focus,
+.openrte-font-family-dropdown:focus,
+.openrte-font-size-dropdown:focus {
   outline: 2px solid #0066cc;
   outline-offset: 1px;
 }
@@ -488,4 +308,16 @@
 .openrte-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Fix for table borders - prevent overlap */
+.openrte-content table {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.openrte-content table td,
+.openrte-content table th {
+  position: relative;
+  border: 1px solid var(--editor-border);
 }

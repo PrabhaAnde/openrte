@@ -7,8 +7,7 @@ export class ClipboardPlugin extends BasePlugin {
   private pasteButton: HTMLElement;
   
   constructor() {
-    // We'll override the createToolbarControl method
-    super('clipboard', '', 'openrte-clipboard-control');
+    super('clipboard', null, 'Clipboard', 'openrte-clipboard-control');
     
     // Create temporary buttons (will be replaced in createToolbarControl)
     this.cutButton = document.createElement('button');
@@ -98,7 +97,48 @@ export class ClipboardPlugin extends BasePlugin {
   private cut(): void {
     if (!this.editor) return;
     
-    document.execCommand('cut', false);
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      // Get selected content
+      const range = selection.getRangeAt(0);
+      const selectedContent = range.cloneContents();
+      
+      // Create a temporary element to extract text and HTML
+      const temp = document.createElement('div');
+      temp.appendChild(selectedContent);
+      const text = temp.textContent || '';
+      const html = temp.innerHTML;
+      
+      // Write content to clipboard
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' })
+        })
+      ]).then(() => {
+        // Delete the content after successful copy
+        range.deleteContents();
+        
+        // Collapse the selection
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }).catch(error => {
+        console.error('Failed to cut to clipboard:', error);
+        
+        // Fallback: Try simpler method
+        navigator.clipboard.writeText(text).then(() => {
+          range.deleteContents();
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }).catch(() => {
+          // Final fallback: Focus element and suggest keyboard shortcut
+          this.editor?.getContentArea().focus();
+          console.warn('Please use Ctrl+X to cut the selected content');
+        });
+      });
+    }
     
     // Update button states
     this.updateButtonStates();
@@ -107,7 +147,37 @@ export class ClipboardPlugin extends BasePlugin {
   private copy(): void {
     if (!this.editor) return;
     
-    document.execCommand('copy', false);
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      // Get selected content
+      const range = selection.getRangeAt(0);
+      const selectedContent = range.cloneContents();
+      
+      // Create a temporary element to extract text and HTML
+      const temp = document.createElement('div');
+      temp.appendChild(selectedContent);
+      const text = temp.textContent || '';
+      const html = temp.innerHTML;
+      
+      // Write content to clipboard
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' })
+        })
+      ]).catch(error => {
+        console.error('Failed to copy to clipboard:', error);
+        
+        // Fallback: Try simpler writeText method
+        navigator.clipboard.writeText(text).catch(err => {
+          console.error('Could not copy text:', err);
+          
+          // Final fallback: Focus element and suggest keyboard shortcut
+          this.editor?.getContentArea().focus();
+          console.warn('Please use Ctrl+C to copy the selected content');
+        });
+      });
+    }
     
     // Update button states
     this.updateButtonStates();
@@ -116,76 +186,171 @@ export class ClipboardPlugin extends BasePlugin {
   private paste(): void {
     if (!this.editor) return;
     
-    // Try to paste using the Clipboard API if available
-    if (navigator.clipboard && navigator.clipboard.read) {
-      navigator.clipboard.read()
-        .then(clipboardItems => {
-          // Process clipboard items
-          this.processClipboardItems(clipboardItems);
+    const contentArea = this.editor.getContentArea();
+    
+    // Use the modern Clipboard API
+    if (navigator.clipboard) {
+      // Try to get text content first
+      navigator.clipboard.readText()
+        .then(text => {
+          // Insert the text at current selection
+          const selection = window.getSelection();
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(document.createTextNode(text));
+            
+            // Move cursor to end of inserted text
+            range.setStartAfter(range.endContainer);
+            range.setEndAfter(range.endContainer);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
         })
-        .catch(error => {
-          console.error('Failed to read clipboard contents:', error);
-          // Fallback to execCommand
-          document.execCommand('paste', false);
+        .catch(() => {
+          // Try to get all clipboard items if text fails
+          if (navigator.clipboard.read) {
+            navigator.clipboard.read()
+              .then(clipboardItems => {
+                this.processClipboardItems(clipboardItems);
+              })
+              .catch(() => {
+                // If both methods fail, request manual paste from user
+                contentArea.focus();
+                console.warn('Please use Ctrl+V to paste content');
+              });
+          }
         });
     } else {
-      // Fallback to execCommand (may require permission)
-      document.execCommand('paste', false);
+      // If Clipboard API is not available
+      // Focus the editor and let the paste event handler take over
+      contentArea.focus();
+      console.warn('Please use Ctrl+V to paste content');
     }
     
     // Update button states
     this.updateButtonStates();
   }
   
-  private processClipboardItems(clipboardItems: ClipboardItems): void {
-    // This function would process different types of clipboard content
-    // For the sake of this implementation, we'll just use the fallback approach
-    document.execCommand('paste', false);
+  private async processClipboardItems(clipboardItems: ClipboardItems): Promise<void> {
+    if (!this.editor) return;
+    
+    for (const item of clipboardItems) {
+      // Check for HTML content
+      if (item.types.includes('text/html')) {
+        const blob = await item.getType('text/html');
+        const html = await blob.text();
+        
+        // Insert the HTML at current selection
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          
+          // Create a temporary container
+          const temp = document.createElement('div');
+          temp.innerHTML = html;
+          
+          // Sanitize HTML if needed (you may want to use a library for this)
+          // ...sanitize code here...
+          
+          // Insert the nodes
+          const fragment = document.createDocumentFragment();
+          while (temp.firstChild) {
+            fragment.appendChild(temp.firstChild);
+          }
+          
+          range.insertNode(fragment);
+        }
+        return;
+      }
+      
+      // Fallback to plain text
+      if (item.types.includes('text/plain')) {
+        const blob = await item.getType('text/plain');
+        const text = await blob.text();
+        
+        // Insert the text at current selection
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(document.createTextNode(text));
+        }
+        return;
+      }
+      
+      // Handle image content
+      if (item.types.some(type => type.startsWith('image/'))) {
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const url = URL.createObjectURL(blob);
+          
+          // Insert image at current selection
+          const selection = window.getSelection();
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            range.deleteContents();
+            
+            const img = document.createElement('img');
+            img.src = url;
+            range.insertNode(img);
+          }
+        }
+      }
+    }
   }
   
   private handleKeyDown = (event: KeyboardEvent): void => {
     if (!this.editor) return;
     
-    // Check for Ctrl+X / Cmd+X (Cut)
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'x') {
-      // Let the default behavior handle it
-      // No need to preventDefault()
-      
-      // Just update button states afterward
-      setTimeout(this.updateButtonStates, 0);
-    }
-    
-    // Check for Ctrl+C / Cmd+C (Copy)
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
-      // Let the default behavior handle it
-      // No need to preventDefault()
-      
-      // Just update button states afterward
-      setTimeout(this.updateButtonStates, 0);
-    }
-    
-    // Check for Ctrl+V / Cmd+V (Paste)
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
-      // Let the default behavior and the paste event handler handle it
-      // No need to preventDefault()
-      
+    // For keyboard shortcuts (Ctrl+X, Ctrl+C, Ctrl+V)
+    // Let the browser handle them and update our button states
+    if ((event.ctrlKey || event.metaKey) && 
+        (event.key.toLowerCase() === 'x' || 
+         event.key.toLowerCase() === 'c' || 
+         event.key.toLowerCase() === 'v')) {
       // Just update button states afterward
       setTimeout(this.updateButtonStates, 0);
     }
   };
   
   private handlePaste = (event: ClipboardEvent): void => {
-    // For advanced paste handling, we could process the clipboard data here
-    // For example, cleaning up pasted HTML from Word or other sources
-    
+    // For advanced paste handling
     if (!this.editor) return;
     
-    // For now, we'll let the default paste behavior handle it
-    // But in a real implementation, we might want to:
-    // 1. Get clipboard data: event.clipboardData
-    // 2. Process different formats: HTML, text, images
-    // 3. Clean up HTML: remove unwanted styles, tags, etc.
-    // 4. Insert the processed content
+    // If we want to handle it manually (optional)
+    // event.preventDefault();
+    
+    // Get clipboard data
+    const clipboardData = event.clipboardData;
+    if (!clipboardData) return;
+    
+    // Check for HTML content
+    const html = clipboardData.getData('text/html');
+    if (html) {
+      // Insert the HTML at current selection
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        event.preventDefault(); // Now we do want to prevent default
+        
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        
+        // Create a temporary container
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        
+        // Insert the nodes
+        const fragment = document.createDocumentFragment();
+        while (temp.firstChild) {
+          fragment.appendChild(temp.firstChild);
+        }
+        
+        range.insertNode(fragment);
+      }
+    }
     
     // Update button states afterward
     setTimeout(this.updateButtonStates, 0);
@@ -203,7 +368,8 @@ export class ClipboardPlugin extends BasePlugin {
     
     // We can't reliably know if there's content in the clipboard,
     // so we'll keep the paste button enabled
-  };  
+  };
+  
   destroy(): void {
     document.removeEventListener('keydown', this.handleKeyDown);
     document.removeEventListener('selectionchange', this.updateButtonStates);

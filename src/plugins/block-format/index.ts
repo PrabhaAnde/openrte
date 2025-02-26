@@ -20,7 +20,8 @@ export class BlockFormatPlugin extends BasePlugin {
   ];
   
   constructor() {
-    super('blockFormat', '', 'openrte-block-format-control');
+    // super('blockFormat', '', 'openrte-block-format-control');
+    super('blockFormat', null, 'Block Format', 'openrte-block-format-control');
     
     // Create dropdown (will be properly initialized in createToolbarControl)
     this.formatDropdown = document.createElement('select');

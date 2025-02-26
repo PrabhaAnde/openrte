@@ -1,31 +1,33 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 export class LinkPlugin extends BasePlugin {
   constructor() {
-    super('link', 'Link', 'openrte-link-button');
+    super('link', 'link', 'Insert Link', 'openrte-link-button');
   }
   
   init(editor: Editor): void {
     super.init(editor);
-    
-    // Add selection change listener to update button state
     document.addEventListener('selectionchange', this.updateButtonState);
+  }
+  
+  createToolbarControl(): HTMLElement {
+    const button = super.createToolbarControl();
+    // Clear any existing content and add the icon
+    button.innerHTML = '';
+    button.appendChild(createIcon('link'));
+    return button;
   }
   
   execute(): void {
     if (!this.editor) return;
     
-    const selectionManager = this.editor.getSelectionManager();
-    const range = selectionManager.getRange();
-    
-    if (!range) return;
-    
-    // Check if we're already in a link
-    if (this.isSelectionLink(range)) {
-      this.editLink(range);
-    } else {
-      this.createLink(range);
+    // Implement link insertion logic
+    const url = prompt('Enter URL:');
+    if (url) {
+      const selectionManager = this.editor.getSelectionManager();
+      selectionManager.applyToSelection(range => this.createLink(range, url));
     }
   }
   
@@ -60,11 +62,7 @@ export class LinkPlugin extends BasePlugin {
     return false;
   }
   
-  private createLink(range: Range): void {
-    const url = prompt('Enter URL:', 'http://');
-    
-    if (!url) return;
-    
+  private createLink(range: Range, url: string): void {
     const link = document.createElement('a');
     link.href = url;
     link.target = '_blank'; // Open in new tab
@@ -136,6 +134,7 @@ export class LinkPlugin extends BasePlugin {
   }
   
   destroy(): void {
+    // document.removeEventListener('keydown', this.handleKeyDown.bind(this));
     document.removeEventListener('selectionchange', this.updateButtonState);
     super.destroy();
   }

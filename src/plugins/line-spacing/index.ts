@@ -18,7 +18,8 @@ export class LineSpacingPlugin extends BasePlugin {
   ];
   
   constructor() {
-    super('lineSpacing', '', 'openrte-line-spacing-control');
+    // super('lineSpacing', '', 'openrte-line-spacing-control');
+    super('lineSpacing', null, 'Line Spacing', 'openrte-line-spacing-control');
     
     // Create dropdown (will be properly initialized in createToolbarControl)
     this.spacingDropdown = document.createElement('select');

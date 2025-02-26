@@ -1,5 +1,6 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 type AlignType = 'left' | 'center' | 'right' | 'justify';
 
@@ -9,7 +10,7 @@ export class AlignmentPlugin extends BasePlugin {
 
   constructor() {
     // We'll override the createToolbarControl method, so we use an empty label here
-    super('alignment', '', 'openrte-alignment-control');
+    super('alignment', null, '', 'openrte-alignment-control');
   }
 
   init(editor: Editor): void {
@@ -44,21 +45,10 @@ export class AlignmentPlugin extends BasePlugin {
     button.className = `openrte-button openrte-align-${type}-button`;
     button.title = `Align ${type}`;
     
-    // Set the icon/text for the button
-    switch (type) {
-      case 'left':
-        button.innerHTML = '&#8676;'; // Left align icon
-        break;
-      case 'center':
-        button.innerHTML = '&#8677;'; // Center align icon
-        break;
-      case 'right':
-        button.innerHTML = '&#8678;'; // Right align icon
-        break;
-      case 'justify':
-        button.innerHTML = '&#8679;'; // Justify icon
-        break;
-    }
+    // Add the icon
+    const iconName = `align${type.charAt(0).toUpperCase() + type.slice(1)}` as any; // Cast to any for now
+    const iconElement = createIcon(iconName);
+    button.appendChild(iconElement);
     
     // Add click handler
     button.addEventListener('click', (e) => {

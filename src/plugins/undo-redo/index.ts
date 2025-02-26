@@ -1,13 +1,19 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 export class UndoRedoPlugin extends BasePlugin {
   private undoButton: HTMLElement;
   private redoButton: HTMLElement;
   
+  // State management for undo/redo functionality
+  private undoStack: string[] = [];
+  private redoStack: string[] = [];
+  private isUndoRedo = false;
+  private maxStackSize = 50;
+  
   constructor() {
-    // We'll override the createToolbarControl method
-    super('undoRedo', '', 'openrte-undo-redo-control');
+    super('undoRedo', null, 'Undo/Redo', 'openrte-undo-redo-control');
     
     // Create temporary buttons (will be replaced in createToolbarControl)
     this.undoButton = document.createElement('button');
@@ -23,7 +29,10 @@ export class UndoRedoPlugin extends BasePlugin {
     // Add input listener to enable/disable buttons
     if (editor) {
       const contentArea = editor.getContentArea();
-      contentArea.addEventListener('input', this.updateButtonStates);
+      contentArea.addEventListener('input', this.handleInput);
+      
+      // Save initial state
+      this.saveState();
       
       // Initialize button states
       this.updateButtonStates();
@@ -77,18 +86,58 @@ export class UndoRedoPlugin extends BasePlugin {
   }
   
   private undo(): void {
-    if (!this.editor) return;
+    if (!this.editor || this.undoStack.length <= 1) return;
     
-    document.execCommand('undo', false);
+    // Get current state and compare with last saved state
+    const contentArea = this.editor.getContentArea();
+    const currentHtml = contentArea.innerHTML;
+    const lastState = this.undoStack[this.undoStack.length - 1];
+    
+    // Save current state if different from last state
+    if (currentHtml !== lastState && !this.isUndoRedo) {
+      this.saveState();
+    }
+    
+    // Now pop the current state (which we just saved if needed)
+    const poppedState = this.undoStack.pop();
+    if (poppedState) {
+      // Add to redo stack
+      this.redoStack.push(poppedState);
+    }
+    
+    // Get the previous state to restore
+    const previousState = this.undoStack[this.undoStack.length - 1];
+    if (previousState) {
+      // Apply the previous state
+      this.isUndoRedo = true;
+      contentArea.innerHTML = previousState;
+      this.isUndoRedo = false;
+      
+      // Dispatch input event to notify of changes
+      contentArea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     
     // Update button states
     this.updateButtonStates();
   }
   
   private redo(): void {
-    if (!this.editor) return;
+    if (!this.editor || this.redoStack.length === 0) return;
     
-    document.execCommand('redo', false);
+    // Get the next state to restore
+    const nextState = this.redoStack.pop();
+    if (nextState) {
+      // Add current state to undo stack
+      this.undoStack.push(nextState);
+      
+      // Apply the next state
+      this.isUndoRedo = true;
+      this.editor.getContentArea().innerHTML = nextState;
+      this.isUndoRedo = false;
+      
+      // Dispatch input event to notify of changes
+      this.editor.getContentArea().dispatchEvent(new Event('input', { bubbles: true }));
+    }
     
     // Update button states
     this.updateButtonStates();
@@ -111,20 +160,47 @@ export class UndoRedoPlugin extends BasePlugin {
     }
   };
   
+  private handleInput = (): void => {
+    // Don't save state if this change is from an undo/redo operation
+    if (this.isUndoRedo) return;
+    
+    // Debounce state saving to avoid too many snapshots on rapid typing
+    this.saveState();
+    
+    // Clear redo stack when new changes are made
+    if (this.redoStack.length > 0) {
+      this.redoStack = [];
+    }
+    
+    // Update button states
+    this.updateButtonStates();
+  };
+  
+  private saveState(): void {
+    if (!this.editor) return;
+    
+    const contentArea = this.editor.getContentArea();
+    const html = contentArea.innerHTML;
+    
+    // Only save if content has changed
+    if (this.undoStack.length === 0 || this.undoStack[this.undoStack.length - 1] !== html) {
+      this.undoStack.push(html);
+      
+      // Limit stack size to prevent memory issues
+      if (this.undoStack.length > this.maxStackSize) {
+        this.undoStack.shift();
+      }
+    }
+  }
+  
   private updateButtonStates = (): void => {
     if (!this.editor) return;
     
-    // Unfortunately, there's no direct way to check if undo/redo is available
-    // We need to implement a workaround or just keep the buttons enabled
+    // Enable/disable undo button based on stack state
+    (this.undoButton as HTMLButtonElement).disabled = this.undoStack.length <= 1;
     
-    // In a more complete implementation, we could track content changes
-    // and maintain our own undo/redo stack to know when to enable/disable
-    
-    // For now, we'll keep both buttons enabled and let the browser handle
-    // whether an undo/redo operation can be performed
-    
-    // Ideally, we might track content changes and disable buttons when
-    // there's nothing to undo/redo, but that's beyond the scope here
+    // Enable/disable redo button based on stack state
+    (this.redoButton as HTMLButtonElement).disabled = this.redoStack.length === 0;
   };
   
   destroy(): void {
@@ -132,8 +208,12 @@ export class UndoRedoPlugin extends BasePlugin {
     
     if (this.editor) {
       const contentArea = this.editor.getContentArea();
-      contentArea.removeEventListener('input', this.updateButtonStates);
+      contentArea.removeEventListener('input', this.handleInput);
     }
+    
+    // Clear state
+    this.undoStack = [];
+    this.redoStack = [];
     
     super.destroy();
   }

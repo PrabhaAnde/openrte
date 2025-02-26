@@ -1,5 +1,6 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 interface CharacterGroup {
   name: string;
@@ -78,7 +79,9 @@ export class SpecialCharactersPlugin extends BasePlugin {
   ];
   
   constructor() {
-    super('specialCharacters', 'Ω', 'openrte-special-chars-button');
+      super('specialCharacters', null, 'Special Characters', 'openrte-special-chars-button');
+
+    
     
     // Create the character dialog
     this.charDialog = this.createCharacterDialog();
@@ -90,6 +93,12 @@ export class SpecialCharactersPlugin extends BasePlugin {
     
     // Add close handler for clicks outside dialog
     document.addEventListener('click', this.handleOutsideClick.bind(this));
+  }
+
+  createToolbarControl(): HTMLElement {
+    const button = super.createToolbarControl();
+    button.textContent = 'Ω'; // Special character as text
+    return button;
   }
   
   init(editor: Editor): void {

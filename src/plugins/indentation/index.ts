@@ -1,5 +1,6 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 export class IndentationPlugin extends BasePlugin {
   private indentButton: HTMLElement;
@@ -7,7 +8,7 @@ export class IndentationPlugin extends BasePlugin {
   
   constructor() {
     // We'll override the createToolbarControl method
-    super('indentation', '', 'openrte-indentation-control');
+    super('indentation', null, '', 'openrte-indentation-control');
     
     // Create temporary buttons (will be replaced in createToolbarControl)
     this.indentButton = document.createElement('button');
@@ -32,7 +33,7 @@ export class IndentationPlugin extends BasePlugin {
     this.indentButton = document.createElement('button');
     this.indentButton.className = 'openrte-button openrte-indent-button';
     this.indentButton.title = 'Increase Indent';
-    this.indentButton.innerHTML = '→'; // Right arrow for indent
+    this.indentButton.appendChild(createIcon('decreaseIndent')); // Switched to correct icon
     this.indentButton.addEventListener('click', (e) => {
       e.preventDefault();
       this.indent();
@@ -45,15 +46,14 @@ export class IndentationPlugin extends BasePlugin {
     this.outdentButton = document.createElement('button');
     this.outdentButton.className = 'openrte-button openrte-outdent-button';
     this.outdentButton.title = 'Decrease Indent';
-    this.outdentButton.innerHTML = '←'; // Left arrow for outdent
+    this.outdentButton.appendChild(createIcon('increaseIndent')); // Switched to correct icon
     this.outdentButton.addEventListener('click', (e) => {
       e.preventDefault();
       this.outdent();
       if (this.editor) {
         this.editor.focus();
       }
-    });
-    
+    });    
     // Add buttons to container
     container.appendChild(this.indentButton);
     container.appendChild(this.outdentButton);
@@ -117,6 +117,7 @@ export class IndentationPlugin extends BasePlugin {
     });
   }
   
+  // Rest of the implementation remains the same...
   private indentListItem(element: HTMLElement): void {
     // Find the list item
     let listItem = element;

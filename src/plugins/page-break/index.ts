@@ -3,7 +3,7 @@ import { Editor } from '../../core/editor';
 
 export class PageBreakPlugin extends BasePlugin {
   constructor() {
-    super('pageBreak', 'Page Break', 'openrte-page-break-button');
+    super('pageBreak', 'pageBreak', 'Page Break', 'openrte-page-break-button');
   }
   
   init(editor: Editor): void {

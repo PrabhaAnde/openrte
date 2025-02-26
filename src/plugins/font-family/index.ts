@@ -22,7 +22,8 @@ export class FontFamilyPlugin extends BasePlugin {
   ];
   
   constructor() {
-    super('fontFamily', '', 'openrte-font-family-control');
+    // super('fontFamily', '', 'openrte-font-family-control');
+    super('fontFamily', null, 'Font Family', 'openrte-font-family-control');
     
     // Create dropdown (will be properly initialized in createToolbarControl)
     this.fontDropdown = document.createElement('select');

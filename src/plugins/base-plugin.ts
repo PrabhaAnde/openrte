@@ -1,5 +1,6 @@
 import { Plugin } from '../types/plugin';
 import { Editor } from '../core/editor';
+import { IconName, createIcon } from '../ui/icon';
 
 export abstract class BasePlugin implements Plugin {
   protected editor: Editor | null = null;
@@ -7,14 +8,26 @@ export abstract class BasePlugin implements Plugin {
   
   constructor(
     private readonly name: string,
+    private readonly iconName: IconName | null,
     private readonly label: string,
     private readonly className: string = ''
   ) {
     // Create toolbar button
     this.button = document.createElement('button');
-    this.button.textContent = this.label;
+    
+    // If an icon is specified, use it; otherwise, use text label
+    if (iconName) {
+      const iconElement = createIcon(iconName);
+      this.button.appendChild(iconElement);
+      // Add aria-label for accessibility
+      this.button.setAttribute('aria-label', label);
+      // Add title for tooltip
+      this.button.title = label;
+    } else {
+      this.button.textContent = this.label;
+    }
+    
     this.button.className = `openrte-button ${this.className}`;
-    this.button.title = this.label;
     this.button.addEventListener('click', this.handleClick.bind(this));
   }
   

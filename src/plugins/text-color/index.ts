@@ -19,7 +19,7 @@ export class TextColorPlugin extends BasePlugin {
   ];
   
   constructor() {
-    super('textColor', 'A', 'openrte-text-color-button');
+    super('textColor', null, 'Text Color', 'openrte-text-color-button');
     
     // Add indicator to the button
     this.button.style.position = 'relative';
@@ -43,6 +43,16 @@ export class TextColorPlugin extends BasePlugin {
     
     // Close color picker when clicking outside
     document.addEventListener('click', this.closeColorPicker.bind(this));
+  }
+
+  createToolbarControl(): HTMLElement {
+    const button = super.createToolbarControl();
+    // Create a colored A text or use a custom icon
+    const colorSwatch = document.createElement('span');
+    colorSwatch.textContent = 'A';
+    colorSwatch.style.color = 'currentColor';
+    button.appendChild(colorSwatch);
+    return button;
   }
   
   execute(): void {
@@ -98,17 +108,83 @@ export class TextColorPlugin extends BasePlugin {
   private applyTextColor(range: Range): void {
     if (range.collapsed) return;
     
-    const span = document.createElement('span');
-    span.style.color = this.currentColor;
+    // Store current selection for restoration
+    const savedSelection = {
+      startContainer: range.startContainer,
+      startOffset: range.startOffset,
+      endContainer: range.endContainer,
+      endOffset: range.endOffset
+    };
     
-    try {
-      range.surroundContents(span);
-    } catch (e) {
-      // Handle complex selections
-      const fragment = range.extractContents();
-      span.appendChild(fragment);
-      range.insertNode(span);
+    // Find if the selection is already inside a text color span
+    const existingColorSpan = this.findExistingColorSpan(range);
+    
+    if (existingColorSpan) {
+      // Update existing span's color
+      existingColorSpan.style.color = this.currentColor;
+    } else {
+      // Create a new span with the color
+      const span = document.createElement('span');
+      span.style.color = this.currentColor;
+      
+      try {
+        range.surroundContents(span);
+      } catch (e) {
+        // Handle complex selections
+        const fragment = range.extractContents();
+        span.appendChild(fragment);
+        range.insertNode(span);
+      }
     }
+    
+    // Hide the color picker after selection
+    this.colorPicker.style.display = 'none';
+    
+    // Restore selection - makes the change visible and allows immediate follow-up edits
+    try {
+      if (this.editor) {
+        const newRange = document.createRange();
+        newRange.setStart(savedSelection.startContainer, savedSelection.startOffset);
+        newRange.setEnd(savedSelection.endContainer, savedSelection.endOffset);
+        this.editor.getSelectionManager().setRange(newRange);
+      }
+    } catch (e) {
+      console.warn('Could not restore selection after color change');
+    }
+  }  
+  // Helper method to find existing color span that contains the current selection
+  private findExistingColorSpan(range: Range): HTMLElement | null {
+    if (!this.editor) return null;
+    
+    let node = range.commonAncestorContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode as Node;
+    }
+    
+    let current = node as HTMLElement;
+    
+    // Look up to find a span with color that fully contains the selection
+    while (current && current !== this.editor.getContentArea()) {
+      if (current.nodeName === 'SPAN' && 
+          current.style && 
+          current.style.color && 
+          this.elementContainsRange(current, range)) {
+        return current;
+      }
+      if (!current.parentNode) break;
+      current = current.parentNode as HTMLElement;
+    }
+    
+    return null;
+  }
+  
+  // Check if an element fully contains the range
+  private elementContainsRange(element: HTMLElement, range: Range): boolean {
+    const nodeRange = document.createRange();
+    nodeRange.selectNodeContents(element);
+    
+    return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
+           nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
   }
   
   destroy(): void {

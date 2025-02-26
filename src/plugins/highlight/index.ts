@@ -19,7 +19,9 @@ export class HighlightPlugin extends BasePlugin {
   ];
   
   constructor() {
-    super('highlight', 'H', 'openrte-highlight-button');
+      super('highlight', null, 'Highlight', 'openrte-highlight-button');
+
+   
     
     // Add indicator to the button
     this.button.style.position = 'relative';
@@ -43,6 +45,13 @@ export class HighlightPlugin extends BasePlugin {
     
     // Close color picker when clicking outside
     document.addEventListener('click', this.closeColorPicker.bind(this));
+  }
+
+  createToolbarControl(): HTMLElement {
+    const button = super.createToolbarControl();
+    // Create a custom highlight icon or use text
+    button.textContent = 'H'; // Or create a custom highlight icon
+    return button;
   }
   
   execute(): void {
@@ -98,57 +107,140 @@ export class HighlightPlugin extends BasePlugin {
   private applyHighlight(range: Range): void {
     if (range.collapsed) return;
     
+    // Store current selection for restoration
+    const savedSelection = {
+      startContainer: range.startContainer,
+      startOffset: range.startOffset,
+      endContainer: range.endContainer,
+      endOffset: range.endOffset
+    };
+    
     // If color is 'transparent', remove highlight instead
     if (this.currentColor === 'transparent') {
       this.removeHighlight(range);
-      return;
+    } else {
+      // Check for existing highlighted span
+      const existingHighlightSpan = this.findExistingHighlightSpan(range);
+      
+      if (existingHighlightSpan) {
+        // Update existing span's background color
+        existingHighlightSpan.style.backgroundColor = this.currentColor;
+      } else {
+        // Create a new span with the background color
+        const span = document.createElement('span');
+        span.style.backgroundColor = this.currentColor;
+        
+        try {
+          range.surroundContents(span);
+        } catch (e) {
+          // Handle complex selections
+          const fragment = range.extractContents();
+          span.appendChild(fragment);
+          range.insertNode(span);
+        }
+      }
     }
     
-    const span = document.createElement('span');
-    span.style.backgroundColor = this.currentColor;
+    // Hide the color picker after application
+    this.colorPicker.style.display = 'none';
     
+    // Restore selection - makes the change visible and allows immediate follow-up edits
     try {
-      range.surroundContents(span);
+      if (this.editor) {
+        const newRange = document.createRange();
+        newRange.setStart(savedSelection.startContainer, savedSelection.startOffset);
+        newRange.setEnd(savedSelection.endContainer, savedSelection.endOffset);
+        this.editor.getSelectionManager().setRange(newRange);
+        
+        // Focus back on the editor
+        this.editor.focus();
+      }
     } catch (e) {
-      // Handle complex selections
-      const fragment = range.extractContents();
-      span.appendChild(fragment);
-      range.insertNode(span);
+      console.warn('Could not restore selection after highlight change');
     }
+  }
+
+  // Helper method to find existing highlight span that contains the current selection
+  private findExistingHighlightSpan(range: Range): HTMLElement | null {
+    if (!this.editor) return null;
+    
+    let node = range.commonAncestorContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode as Node;
+    }
+    
+    let current = node as HTMLElement;
+    
+    // Look up to find a span with background-color that fully contains the selection
+    while (current && current !== this.editor.getContentArea()) {
+      if (current.nodeName === 'SPAN' && 
+          current.style && 
+          current.style.backgroundColor && 
+          this.elementContainsRange(current, range)) {
+        return current;
+      }
+      if (!current.parentNode) break;
+      current = current.parentNode as HTMLElement;
+    }
+    
+    return null;
+  }
+
+  // Check if an element fully contains the range
+  private elementContainsRange(element: HTMLElement, range: Range): boolean {
+    const nodeRange = document.createRange();
+    nodeRange.selectNodeContents(element);
+    
+    return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
+                nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
   }
   
   private removeHighlight(range: Range): void {
     if (!this.editor) return;
     
-    // Find elements with background color in the current selection
-    const startContainer = range.startContainer;
-    const endContainer = range.endContainer;
+    // Create a clone of the range to avoid modification issues
+    const clonedRange = range.cloneRange();
     
-    // If both start and end are the same text node
-    if (startContainer === endContainer && startContainer.nodeType === Node.TEXT_NODE) {
-      let parentNode = startContainer.parentNode;
-      
-      while (parentNode && parentNode !== this.editor.getContentArea()) {
-        if (parentNode.nodeType === Node.ELEMENT_NODE) {
-          const element = parentNode as HTMLElement;
-          if (element.style.backgroundColor) {
-            // Reset background color
-            element.style.backgroundColor = '';
-            
-            // If the element has no more styles, unwrap it
-            if (!element.style.length) {
-              this.unwrapElement(element);
+    // Get all nodes in the selection
+    const iterator = document.createNodeIterator(
+      range.commonAncestorContainer,
+      NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode: function(node) {
+          // Check if node is at least partially within range
+          const nodeRange = document.createRange();
+          nodeRange.selectNodeContents(node);
+          
+          const isStartBeforeEnd = nodeRange.compareBoundaryPoints(Range.START_TO_END, clonedRange) <= 0;
+          const isEndAfterStart = nodeRange.compareBoundaryPoints(Range.END_TO_START, clonedRange) >= 0;
+          
+          if (isStartBeforeEnd && isEndAfterStart) {
+            if (node.nodeName === 'SPAN' && 
+                (node as HTMLElement).style && 
+                (node as HTMLElement).style.backgroundColor) {
+              return NodeFilter.FILTER_ACCEPT;
             }
-            break;
           }
+          return NodeFilter.FILTER_SKIP;
         }
-        parentNode = parentNode.parentNode;
-      }
-    } else {
-      // TODO: Handle more complex selections with multiple highlighted elements
-      // This is a simplified implementation
-      console.log('Complex highlight removal not implemented yet');
+      } as NodeFilter
+    );
+    
+    // Collect spans to process
+    const highlightSpans: HTMLElement[] = [];
+    let currentNode;
+    while (currentNode = iterator.nextNode()) {
+      highlightSpans.push(currentNode as HTMLElement);
     }
+    
+    // Process each highlight span
+    highlightSpans.forEach(span => {
+      span.style.backgroundColor = '';
+      // If the element has no more styles, unwrap it
+      if (!span.style.length) {
+        this.unwrapElement(span);
+      }
+    });
   }
   
   private unwrapElement(element: HTMLElement): void {

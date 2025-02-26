@@ -1,26 +1,35 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 export class ImagePlugin extends BasePlugin {
   constructor() {
-    super('image', 'Image', 'openrte-image-button');
+    super('image', 'image', 'Insert Image', 'openrte-image-button');
   }
   
   init(editor: Editor): void {
     super.init(editor);
   }
   
+  createToolbarControl(): HTMLElement {
+    const button = super.createToolbarControl();
+    // Clear any existing content and add the icon
+    button.innerHTML = '';
+    button.appendChild(createIcon('image'));
+    return button;
+  }
+  
   execute(): void {
     if (!this.editor) return;
     
-    this.insertImage();
+    // Image insertion implementation
+    const url = prompt('Enter image URL:');
+    if (url) {
+      this.insertImage(url);
+    }
   }
   
-  private insertImage(): void {
-    const url = prompt('Enter image URL:', 'https://');
-    
-    if (!url) return;
-    
+  private insertImage(url: string): void {
     const img = document.createElement('img');
     img.src = url;
     img.alt = 'Image';

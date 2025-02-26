@@ -8,7 +8,8 @@ export class ListsPlugin extends BasePlugin {
   
   constructor() {
     // We'll override the createToolbarControl method
-    super('lists', '', 'openrte-lists-control');
+    // super('lists', '', 'openrte-lists-control');
+    super('lists', null, 'Lists', 'openrte-lists-control');
   }
   
   init(editor: Editor): void {

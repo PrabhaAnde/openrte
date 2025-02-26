@@ -23,7 +23,14 @@ export abstract class FormattingPlugin extends BasePlugin {
   
   init(editor: Editor): void {
     super.init(editor);
+    // Listen for both standard selection change and our custom event
     document.addEventListener('selectionchange', this.updateButtonState);
+    
+    // Listen for our custom selectionupdate event that gets triggered after mouseup
+    if (editor) {
+      const contentArea = editor.getContentArea();
+      contentArea.addEventListener('selectionupdate', this.updateButtonState);
+    }
   }
   
   execute(): void {
@@ -50,6 +57,12 @@ export abstract class FormattingPlugin extends BasePlugin {
   
   destroy(): void {
     document.removeEventListener('selectionchange', this.updateButtonState);
+    
+    if (this.editor) {
+      const contentArea = this.editor.getContentArea();
+      contentArea.removeEventListener('selectionupdate', this.updateButtonState);
+    }
+    
     super.destroy();
   }
 }

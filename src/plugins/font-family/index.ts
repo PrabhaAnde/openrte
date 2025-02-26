@@ -22,7 +22,6 @@ export class FontFamilyPlugin extends BasePlugin {
   ];
   
   constructor() {
-    // super('fontFamily', '', 'openrte-font-family-control');
     super('fontFamily', null, 'Font Family', 'openrte-font-family-control');
     
     // Create dropdown (will be properly initialized in createToolbarControl)
@@ -34,6 +33,12 @@ export class FontFamilyPlugin extends BasePlugin {
     
     // Add selection change listener to update dropdown
     document.addEventListener('selectionchange', this.updateDropdownState);
+    
+    // Add listener for custom selection update event
+    if (editor) {
+      const contentArea = editor.getContentArea();
+      contentArea.addEventListener('selectionupdate', this.updateDropdownState);
+    }
   }
   
   execute(): void {
@@ -104,17 +109,63 @@ export class FontFamilyPlugin extends BasePlugin {
   private applyFontFamilyToRange(range: Range, fontFamily: string): void {
     if (range.collapsed) return;
     
-    // Create a span with the font family
-    const span = document.createElement('span');
-    span.style.fontFamily = fontFamily;
+    // Check for existing font family span
+    const existingFontSpan = this.findExistingFontSpan(range);
     
+    if (existingFontSpan) {
+      // Update existing span
+      existingFontSpan.style.fontFamily = fontFamily;
+    } else {
+      // Create a new span with the font family
+      const span = document.createElement('span');
+      span.style.fontFamily = fontFamily;
+      
+      try {
+        range.surroundContents(span);
+      } catch (e) {
+        // Handle complex selections (e.g., across elements)
+        const fragment = range.extractContents();
+        span.appendChild(fragment);
+        range.insertNode(span);
+      }
+    }
+  }
+  
+  private findExistingFontSpan(range: Range): HTMLElement | null {
+    if (!this.editor) return null;
+    
+    let node = range.commonAncestorContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode as Node;
+    }
+    
+    let current = node as HTMLElement;
+    
+    // Look up to find a span with font-family that contains the selection
+    while (current && current !== this.editor.getContentArea()) {
+      if (current.nodeName === 'SPAN' && 
+          current.style && 
+          current.style.fontFamily && 
+          this.elementContainsRange(current, range)) {
+        return current;
+      }
+      if (!current.parentNode) break;
+      current = current.parentNode as HTMLElement;
+    }
+    
+    return null;
+  }
+  
+  private elementContainsRange(element: HTMLElement, range: Range): boolean {
     try {
-      range.surroundContents(span);
+      const nodeRange = document.createRange();
+      nodeRange.selectNodeContents(element);
+      
+      return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
+             nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
     } catch (e) {
-      // Handle complex selections (e.g., across elements)
-      const fragment = range.extractContents();
-      span.appendChild(fragment);
-      range.insertNode(span);
+      console.warn('Error checking element range containment:', e);
+      return false;
     }
   }
   
@@ -125,28 +176,12 @@ export class FontFamilyPlugin extends BasePlugin {
     if (!range) return;
     
     // Find current font family
-    let node = range.commonAncestorContainer;
+    let fontFamily = this.getSelectionFontFamily(range);
     
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentNode as Node;
-    }
-    
-    let fontFamily: string | null = null;
-    
-    // Search up the DOM tree for font-family
-    while (node && node !== this.editor.getContentArea()) {
-      const element = node as HTMLElement;
-      if (element.style && element.style.fontFamily) {
-        fontFamily = element.style.fontFamily;
-        break;
-      }
-      node = node.parentNode as Node;
-    }
-    
-    // Update dropdown
+    // Update dropdown if font family found
     if (fontFamily) {
       for (let i = 0; i < this.fontDropdown.options.length; i++) {
-        if (this.fontDropdown.options[i].value === fontFamily) {
+        if (this.areFontFamiliesEquivalent(this.fontDropdown.options[i].value, fontFamily)) {
           this.fontDropdown.selectedIndex = i;
           return;
         }
@@ -157,8 +192,63 @@ export class FontFamilyPlugin extends BasePlugin {
     this.fontDropdown.selectedIndex = 0;
   };
   
+  private getSelectionFontFamily(range: Range): string | null {
+    if (!this.editor) return null;
+    
+    // If range is collapsed (cursor only), check ancestors
+    if (range.collapsed) {
+      let node = range.commonAncestorContainer;
+      if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentNode as Node;
+      }
+      
+      return this.getNodeFontFamily(node as HTMLElement);
+    }
+    
+    // For selections, check for a span with font family
+    const existingFontSpan = this.findExistingFontSpan(range);
+    if (existingFontSpan && existingFontSpan.style.fontFamily) {
+      return existingFontSpan.style.fontFamily;
+    }
+    
+    return null;
+  }
+  
+  private getNodeFontFamily(element: HTMLElement): string | null {
+    if (!element) return null;
+    
+    // Check if element has a font-family style
+    if (element.style && element.style.fontFamily) {
+      return element.style.fontFamily;
+    }
+    
+    // Check computed style
+    const computedStyle = window.getComputedStyle(element);
+    if (computedStyle.fontFamily) {
+      return computedStyle.fontFamily;
+    }
+    
+    return null;
+  }
+  
+  // Helper to compare font families which might have different formatting
+  private areFontFamiliesEquivalent(font1: string, font2: string): boolean {
+    // Normalize strings by removing extra spaces and quotes
+    const normalize = (font: string) => {
+      return font.replace(/['"]/g, '').toLowerCase().trim();
+    };
+    
+    return normalize(font1) === normalize(font2);
+  }
+  
   destroy(): void {
     document.removeEventListener('selectionchange', this.updateDropdownState);
+    
+    if (this.editor) {
+      const contentArea = this.editor.getContentArea();
+      contentArea.removeEventListener('selectionupdate', this.updateDropdownState);
+    }
+    
     this.fontDropdown.removeEventListener('change', this.handleFontChange);
     super.destroy();
   }

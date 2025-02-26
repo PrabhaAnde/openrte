@@ -18,6 +18,12 @@ export class AlignmentPlugin extends BasePlugin {
     
     // Add selection change listener to update button states
     document.addEventListener('selectionchange', this.updateButtonStates);
+    
+    // Add listener for custom selection update event
+    if (editor) {
+      const contentArea = editor.getContentArea();
+      contentArea.addEventListener('selectionupdate', this.updateButtonStates);
+    }
   }
 
   execute(): void {
@@ -178,6 +184,12 @@ export class AlignmentPlugin extends BasePlugin {
   
   destroy(): void {
     document.removeEventListener('selectionchange', this.updateButtonStates);
+    
+    if (this.editor) {
+      const contentArea = this.editor.getContentArea();
+      contentArea.removeEventListener('selectionupdate', this.updateButtonStates);
+    }
+    
     super.destroy();
   }
 }

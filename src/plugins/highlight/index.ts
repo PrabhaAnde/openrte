@@ -1,6 +1,7 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
 import { createColorPicker, ColorOption } from '../../ui/color-picker';
+import { createIcon } from '../../ui/icon';
 
 export class HighlightPlugin extends BasePlugin {
   private colorPicker: HTMLElement;
@@ -20,8 +21,6 @@ export class HighlightPlugin extends BasePlugin {
   
   constructor() {
       super('highlight', null, 'Highlight', 'openrte-highlight-button');
-
-   
     
     // Add indicator to the button
     this.button.style.position = 'relative';
@@ -45,12 +44,39 @@ export class HighlightPlugin extends BasePlugin {
     
     // Close color picker when clicking outside
     document.addEventListener('click', this.closeColorPicker.bind(this));
+    
+    // Add selection listener to detect highlight color in selection
+    document.addEventListener('selectionchange', this.updateHighlightState);
+  }
+
+  init(editor: Editor): void {
+    super.init(editor);
+    
+    // Add listener for custom selection update event
+    if (editor) {
+      const contentArea = editor.getContentArea();
+      contentArea.addEventListener('selectionupdate', this.updateHighlightState);
+    }
   }
 
   createToolbarControl(): HTMLElement {
     const button = super.createToolbarControl();
-    // Create a custom highlight icon or use text
-    button.textContent = 'H'; // Or create a custom highlight icon
+    
+    // Clear existing content and add the proper icon
+    button.innerHTML = '';
+    button.appendChild(createIcon('highlight'));
+    
+    // Add color indicator
+    const colorIndicator = document.createElement('div');
+    colorIndicator.style.width = '100%';
+    colorIndicator.style.height = '3px';
+    colorIndicator.style.backgroundColor = this.currentColor;
+    colorIndicator.style.position = 'absolute';
+    colorIndicator.style.bottom = '0';
+    colorIndicator.style.left = '0';
+    colorIndicator.style.borderRadius = '0 0 3px 3px';
+    button.appendChild(colorIndicator);
+    
     return button;
   }
   
@@ -69,7 +95,7 @@ export class HighlightPlugin extends BasePlugin {
     if (this.colorPicker.style.display === 'none') {
       // Position the color picker below the button
       const rect = this.button.getBoundingClientRect();
-      this.colorPicker.style.top = `${rect.bottom + window.scrollY}px`;
+      this.colorPicker.style.top = `${rect.bottom + window.scrollY + 5}px`;
       this.colorPicker.style.left = `${rect.left + window.scrollX}px`;
       this.colorPicker.style.display = 'block';
     } else {
@@ -102,6 +128,65 @@ export class HighlightPlugin extends BasePlugin {
     
     // Apply the color to the selection
     this.execute();
+  }
+  
+  private updateHighlightState = (): void => {
+    if (!this.editor) return;
+    
+    const range = this.editor.getSelectionManager().getRange();
+    if (!range) return;
+    
+    // Find current highlight color in selection
+    let currentHighlight = this.getSelectionHighlight(range);
+    
+    // Update button indicator if a color is found
+    if (currentHighlight) {
+      const indicator = this.button.querySelector('div');
+      if (indicator) {
+        indicator.style.backgroundColor = currentHighlight;
+      }
+      this.currentColor = currentHighlight;
+    }
+  };
+  
+  private getSelectionHighlight(range: Range): string | null {
+    if (!this.editor) return null;
+    
+    // If range is collapsed (cursor only), check ancestors
+    if (range.collapsed) {
+      let node = range.commonAncestorContainer;
+      if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentNode as Node;
+      }
+      
+      return this.getNodeHighlight(node as HTMLElement);
+    }
+    
+    // For actual selections, check if there's a span with highlight
+    const existingHighlightSpan = this.findExistingHighlightSpan(range);
+    if (existingHighlightSpan && existingHighlightSpan.style.backgroundColor) {
+      return existingHighlightSpan.style.backgroundColor;
+    }
+    
+    return null;
+  }
+  
+  private getNodeHighlight(element: HTMLElement): string | null {
+    if (!element) return null;
+    
+    // Check if element has a background-color style
+    if (element.style && element.style.backgroundColor) {
+      return element.style.backgroundColor;
+    }
+    
+    // Check computed style
+    const computedStyle = window.getComputedStyle(element);
+    if (computedStyle.backgroundColor !== 'rgba(0, 0, 0, 0)' && 
+        computedStyle.backgroundColor !== 'transparent') {
+      return computedStyle.backgroundColor;
+    }
+    
+    return null;
   }
   
   private applyHighlight(range: Range): void {
@@ -188,11 +273,16 @@ export class HighlightPlugin extends BasePlugin {
 
   // Check if an element fully contains the range
   private elementContainsRange(element: HTMLElement, range: Range): boolean {
-    const nodeRange = document.createRange();
-    nodeRange.selectNodeContents(element);
-    
-    return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
+    try {
+      const nodeRange = document.createRange();
+      nodeRange.selectNodeContents(element);
+      
+      return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
                 nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
+    } catch (e) {
+      console.warn('Error checking element range containment:', e);
+      return false;
+    }
   }
   
   private removeHighlight(range: Range): void {
@@ -255,6 +345,13 @@ export class HighlightPlugin extends BasePlugin {
   
   destroy(): void {
     document.removeEventListener('click', this.closeColorPicker);
+    document.removeEventListener('selectionchange', this.updateHighlightState);
+    
+    if (this.editor) {
+      const contentArea = this.editor.getContentArea();
+      contentArea.removeEventListener('selectionupdate', this.updateHighlightState);
+    }
+    
     if (this.colorPicker.parentNode) {
       this.colorPicker.parentNode.removeChild(this.colorPicker);
     }

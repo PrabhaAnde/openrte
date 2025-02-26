@@ -73,6 +73,9 @@ export class Editor {
     this.addEventHandler(this.contentArea, 'keydown', this.handleKeyDown);
     this.addEventHandler(this.contentArea, 'input', this.handleInput);
     
+    // Add mouseup handler to catch double-click and triple-click selections
+    this.addEventHandler(this.contentArea, 'mouseup', this.handleMouseUp);
+    
     // Add focus and blur handlers
     this.addEventHandler(this.contentArea, 'focus', this.handleFocus);
     this.addEventHandler(this.contentArea, 'blur', this.handleBlur);
@@ -96,6 +99,16 @@ export class Editor {
   private handleInput = (): void => {
     // Handle content changes
     // console.log('Content changed');
+  };
+  
+  private handleMouseUp = (event: MouseEvent): void => {
+    // Trigger a custom event for plugins to update their state
+    // This helps with double-click and triple-click selections
+    setTimeout(() => {
+      // Use setTimeout to ensure selection is complete
+      const customEvent = new CustomEvent('selectionupdate', { bubbles: true });
+      this.contentArea.dispatchEvent(customEvent);
+    }, 0);
   };
   
   private handleFocus = (): void => {

@@ -1,5 +1,6 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { createIcon } from '../../ui/icon';
 
 type ListType = 'ol' | 'ul';
 
@@ -7,8 +8,6 @@ export class ListsPlugin extends BasePlugin {
   private listButtons: Map<ListType, HTMLElement> = new Map();
   
   constructor() {
-    // We'll override the createToolbarControl method
-    // super('lists', '', 'openrte-lists-control');
     super('lists', null, 'Lists', 'openrte-lists-control');
   }
   
@@ -44,8 +43,9 @@ export class ListsPlugin extends BasePlugin {
     button.className = `openrte-button openrte-${type}-button`;
     button.title = type === 'ol' ? 'Ordered List' : 'Unordered List';
     
-    // Set the icon/text for the button
-    button.innerHTML = type === 'ol' ? '1.' : '•';
+    // Use SVG icons instead of text characters
+    const iconName = type === 'ol' ? 'orderedList' : 'unorderedList';
+    button.appendChild(createIcon(iconName));
     
     // Add click handler
     button.addEventListener('click', (e) => {

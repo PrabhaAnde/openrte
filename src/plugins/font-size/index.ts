@@ -34,6 +34,12 @@ export class FontSizePlugin extends BasePlugin {
     
     // Add selection change listener to update dropdown
     document.addEventListener('selectionchange', this.updateDropdownState);
+    
+    // Add listener for custom selection update event
+    if (editor) {
+      const contentArea = editor.getContentArea();
+      contentArea.addEventListener('selectionupdate', this.updateDropdownState);
+    }
   }
   
   execute(): void {
@@ -111,13 +117,7 @@ export class FontSizePlugin extends BasePlugin {
     };
     
     // Find if the current selection is already inside a font-size span
-    let node = range.commonAncestorContainer;
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentNode as Node;
-    }
-    
-    // Check if we're directly inside a font-size span
-    const existingFontSizeSpan = this.findExistingFontSizeSpan(node, range);
+    const existingFontSizeSpan = this.findExistingFontSizeSpan(range);
     
     if (existingFontSizeSpan) {
       // Update existing span's font size
@@ -150,7 +150,7 @@ export class FontSizePlugin extends BasePlugin {
     }
   }
   
-  // New helper method to handle complex range formatting
+  // Helper method to handle complex range formatting
   private handleComplexRangeFormatting(range: Range, span: HTMLElement): void {
     // First attempt: extract and reinsert content
     const fragment = range.extractContents();
@@ -161,7 +161,7 @@ export class FontSizePlugin extends BasePlugin {
     this.mergeNestedFontSizeSpans(span);
   }
   
-  // New helper to merge and clean up nested spans
+  // Helper to merge and clean up nested spans
   private mergeNestedFontSizeSpans(parentElement: HTMLElement): void {
     const spanElements = parentElement.querySelectorAll('span[style*="font-size"]');
     
@@ -178,12 +178,20 @@ export class FontSizePlugin extends BasePlugin {
   }
   
   // Helper method to find existing font-size span that contains the current selection
-  private findExistingFontSizeSpan(node: Node, range: Range): HTMLElement | null {
+  private findExistingFontSizeSpan(range: Range): HTMLElement | null {
+    if (!this.editor) return null;
+    
+    let node = range.commonAncestorContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode as Node;
+    }
+    
     let current = node as HTMLElement;
     
     // Look up to find a span with font-size that fully contains the selection
-    while (current && current !== this.editor?.getContentArea()) {
+    while (current && current !== this.editor.getContentArea()) {
       if (current.nodeName === 'SPAN' && 
+          current.style && 
           current.style.fontSize && 
           this.elementContainsRange(current, range)) {
         return current;
@@ -197,11 +205,16 @@ export class FontSizePlugin extends BasePlugin {
   
   // Check if an element fully contains the range
   private elementContainsRange(element: HTMLElement, range: Range): boolean {
-    const nodeRange = document.createRange();
-    nodeRange.selectNodeContents(element);
-    
-    return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
-           nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
+    try {
+      const nodeRange = document.createRange();
+      nodeRange.selectNodeContents(element);
+      
+      return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
+             nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
+    } catch (e) {
+      console.warn('Error checking element range containment:', e);
+      return false;
+    }
   }
   
   private updateDropdownState = (): void => {
@@ -211,23 +224,7 @@ export class FontSizePlugin extends BasePlugin {
     if (!range) return;
     
     // Find current font size
-    let node = range.commonAncestorContainer;
-    
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentNode as Node;
-    }
-    
-    let fontSize: string | null = null;
-    
-    // Search up the DOM tree for font-size
-    while (node && node !== this.editor.getContentArea()) {
-      const element = node as HTMLElement;
-      if (element.style && element.style.fontSize) {
-        fontSize = element.style.fontSize;
-        break;
-      }
-      node = node.parentNode as Node;
-    }
+    let fontSize = this.getSelectionFontSize(range);
     
     // Update dropdown - now with normalized comparison
     if (fontSize) {
@@ -248,6 +245,46 @@ export class FontSizePlugin extends BasePlugin {
     this.sizeDropdown.selectedIndex = 0;
   };
   
+  private getSelectionFontSize(range: Range): string | null {
+    if (!this.editor) return null;
+    
+    // If range is collapsed (cursor only), check ancestors
+    if (range.collapsed) {
+      let node = range.commonAncestorContainer;
+      if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentNode as Node;
+      }
+      
+      return this.getNodeFontSize(node as HTMLElement);
+    }
+    
+    // For selections, check for a span with font size
+    const existingFontSizeSpan = this.findExistingFontSizeSpan(range);
+    if (existingFontSizeSpan && existingFontSizeSpan.style.fontSize) {
+      return existingFontSizeSpan.style.fontSize;
+    }
+    
+    return null;
+  }
+  
+  private getNodeFontSize(element: HTMLElement): string | null {
+    if (!element) return null;
+    
+    // Check if element has a font-size style
+    if (element.style && element.style.fontSize) {
+      return element.style.fontSize;
+    }
+    
+    // Check computed style - only if significantly different from default
+    const computedStyle = window.getComputedStyle(element);
+    const defaultSize = '16px'; // Most browsers default
+    if (computedStyle.fontSize !== defaultSize) {
+      return computedStyle.fontSize;
+    }
+    
+    return null;
+  }
+  
   // Helper to check if two different representations of font size are equivalent
   private areFontSizesEquivalent(size1: string, size2: string): boolean {
     // This is a simplified check that could be expanded with actual conversion logic
@@ -266,13 +303,29 @@ export class FontSizePlugin extends BasePlugin {
       return true;
     }
     
-    // More complex conversion logic could be added here
+    // Handle pixel to point conversion (approximate)
+    if ((unit1 === 'px' && unit2 === 'pt') || (unit1 === 'pt' && unit2 === 'px')) {
+      // 1pt ≈ 1.33px
+      const conversionFactor = 1.33;
+      
+      if (unit1 === 'px' && unit2 === 'pt') {
+        return Math.abs(numericValue1 - (numericValue2 * conversionFactor)) < 1;
+      } else {
+        return Math.abs(numericValue1 * conversionFactor - numericValue2) < 1;
+      }
+    }
     
     return false;
   }
   
   destroy(): void {
     document.removeEventListener('selectionchange', this.updateDropdownState);
+    
+    if (this.editor) {
+      const contentArea = this.editor.getContentArea();
+      contentArea.removeEventListener('selectionupdate', this.updateDropdownState);
+    }
+    
     this.sizeDropdown.removeEventListener('change', this.handleSizeChange);
     super.destroy();
   }

@@ -1,11 +1,35 @@
 import { Plugin } from '../types/plugin';
 import { Editor } from '../core/editor';
+import { EventBus } from '../core/event-bus';
 import { IconName, createIcon } from '../ui/icon';
 
+/**
+ * Base implementation of the Plugin interface
+ */
 export abstract class BasePlugin implements Plugin {
+  /**
+   * Reference to the editor instance
+   */
   protected editor: Editor | null = null;
+  
+  /**
+   * Reference to the event bus
+   */
+  protected eventBus: EventBus | null = null;
+  
+  /**
+   * The toolbar button element
+   */
   protected button: HTMLElement;
   
+  /**
+   * Constructor
+   * 
+   * @param name The unique name of the plugin
+   * @param iconName The icon name (if any)
+   * @param label The display label for the plugin
+   * @param className Additional CSS class name(s)
+   */
   constructor(
     private readonly name: string,
     private readonly iconName: IconName | null,
@@ -27,22 +51,64 @@ export abstract class BasePlugin implements Plugin {
       this.button.textContent = this.label;
     }
     
-    this.button.className = `openrte-button ${this.className}`;
+    // Add CSS classes
+    this.button.className = `openrte-button ${this.className}`.trim();
+    
+    // Add click handler
     this.button.addEventListener('click', this.handleClick.bind(this));
   }
   
+  /**
+   * Get the unique name of the plugin
+   * 
+   * @returns The plugin name
+   */
   getName(): string {
     return this.name;
   }
   
+  /**
+   * Initialize the plugin with the editor instance
+   * 
+   * @param editor The editor instance
+   */
   init(editor: Editor): void {
     this.editor = editor;
+    this.eventBus = editor.getPluginRegistry().getEventBus();
+    
+    // Subscribe to events
+    if (this.eventBus && this.onPluginEvent) {
+      this.eventBus.on('plugin:event', this.handlePluginEvent.bind(this));
+      
+      // Subscribe to events specifically for this plugin
+      const pluginEventPrefix = `plugin:${this.getName()}:`;
+      this.eventBus.on(pluginEventPrefix + '*', (data) => {
+        if (this.onPluginEvent) {
+          // Extract the event name after the prefix
+          const eventName = data.event.substring(pluginEventPrefix.length);
+          this.onPluginEvent(eventName, data.data);
+        }
+      });
+    }
+    
+    // Emit initialization event
+    this.emitEvent('init', { plugin: this });
   }
   
+  /**
+   * Create and return a toolbar control element
+   * 
+   * @returns HTMLElement for the toolbar
+   */
   createToolbarControl(): HTMLElement {
     return this.button;
   }
   
+  /**
+   * Handle button click
+   * 
+   * @param event Mouse event
+   */
   protected handleClick(event: MouseEvent): void {
     event.preventDefault();
     this.execute();
@@ -53,10 +119,63 @@ export abstract class BasePlugin implements Plugin {
     }
   }
   
+  /**
+   * Handle plugin events
+   * 
+   * @param data Event data
+   */
+  protected handlePluginEvent(data: any): void {
+    if (this.onPluginEvent) {
+      this.onPluginEvent(data.event, data.data);
+    }
+  }
+  
+  /**
+   * Emit a plugin-specific event
+   * 
+   * @param event The event name
+   * @param data The event data
+   */
+  protected emitEvent(event: string, data: any): void {
+    if (this.eventBus) {
+      this.eventBus.emit(`plugin:${this.getName()}:${event}`, data);
+    }
+  }
+  
+  /**
+   * Execute the plugin's primary action
+   */
   abstract execute(): void;
   
+  /**
+   * Clean up any resources
+   */
   destroy(): void {
-    this.button.removeEventListener('click', this.handleClick);
+    // Unsubscribe from events
+    if (this.eventBus && this.onPluginEvent) {
+      this.eventBus.off('plugin:event', this.handlePluginEvent.bind(this));
+      
+      // Unsubscribe from plugin-specific events
+      const pluginEventPrefix = `plugin:${this.getName()}:`;
+      // (Implementation would depend on how event bus handles wildcard events)
+    }
+    
+    // Remove event listeners
+    this.button.removeEventListener('click', this.handleClick.bind(this));
+    
+    // Emit destruction event
+    this.emitEvent('destroy', { plugin: this });
+    
+    // Clear references
     this.editor = null;
+    this.eventBus = null;
   }
+  
+  /**
+   * Handle plugin events
+   * 
+   * @param event The event name
+   * @param data The event data
+   */
+  onPluginEvent?(event: string, data: any): void;
 }

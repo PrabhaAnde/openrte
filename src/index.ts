@@ -87,9 +87,9 @@ export function createEditor(element: HTMLElement): Editor {
   // Register advanced features plugins
   editor.registerPlugin(new FontFamilyPlugin());
   editor.registerPlugin(new FontSizePlugin());
-  editor.registerPlugin(new UndoRedoPlugin());
-  editor.registerPlugin(new ClipboardPlugin());
-  editor.registerPlugin(new SpecialCharactersPlugin());
+  // editor.registerPlugin(new UndoRedoPlugin());
+  // editor.registerPlugin(new ClipboardPlugin());
+  // editor.registerPlugin(new SpecialCharactersPlugin());
   
   return editor;
 }

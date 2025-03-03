@@ -3,6 +3,8 @@ import { SelectionManager } from './selection-manager';
 import { Plugin } from '../types/plugin';
 import { setupContentEditable, focusElement } from '../utils/browser-utils';
 import { sanitizeHtml, normalizeHtml } from '../utils/html-utils';
+import { DocumentModel } from '../model/document-model';
+import { HTMLParser } from '../model/html-parser';
 
 /**
  * Main editor class for OpenRTE
@@ -37,6 +39,12 @@ export class Editor {
    * Event listeners for cleanup
    */
   private eventListeners: { element: EventTarget; type: string; listener: EventListener }[] = [];
+
+  /**
+ * Document model
+ */
+  private documentModel: DocumentModel;
+
   
   /**
    * Constructor
@@ -55,6 +63,24 @@ export class Editor {
     
     // Set up event listeners
     this.setupEventListeners();
+
+
+    // In the constructor, after initializing other components, add:
+    // Initialize document model
+    this.documentModel = new DocumentModel();
+
+    // Parse initial content to model (optional in Phase 2A)
+    this.parseContentToModel();
+  }
+
+    /**
+   * Parse current content to document model
+   * This is a one-way operation in Phase 2A
+   */
+  private parseContentToModel(): void {
+    const html = this.contentArea.innerHTML;
+    const document = HTMLParser.parseProcessedHtml(html, this.documentModel);
+    this.documentModel.setDocument(document as any);
   }
   
   /**
@@ -351,12 +377,23 @@ export class Editor {
     
     // Ensure there's at least one paragraph
     this.ensureContent();
+
+    
     
     // Emit content change event
     this.pluginRegistry.emit('editor:contentchange', {
       html: normalized,
       editor: this
     });
+
+    this.parseContentToModel();
+  }
+
+  /**
+ * Get the document model
+ */
+  getDocumentModel(): DocumentModel {
+    return this.documentModel;
   }
   
   /**

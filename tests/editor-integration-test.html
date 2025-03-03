@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenRTE Editor Integration Tests</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .container {
+      margin-top: 20px;
+    }
+    
+    .test-editor {
+      border: 1px solid #ccc;
+      padding: 10px;
+      min-height: 200px;
+      margin-bottom: 20px;
+    }
+    
+    .test-output {
+      border: 1px solid #ccc;
+      background-color: #f8f8f8;
+      padding: 10px;
+      min-height: 200px;
+      overflow: auto;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    
+    button {
+      padding: 10px 15px;
+      margin-right: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+    
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>OpenRTE Editor Integration Tests</h1>
+  <p>This page tests the integration between the Editor and the document model.</p>
+  
+  <button id="run-tests-btn">Run Integration Tests</button>
+  
+  <div id="editor-container" class="test-editor">
+    <p>This is the editor content. It will be replaced during tests.</p>
+  </div>
+  
+  <h2>Test Results</h2>
+  <div id="test-output" class="test-output"></div>
+  
+  <script type="module">
+    import { EditorIntegrationTest } from '../src/model/tests/editor-integration-test.js';
+    
+    // Function to log messages to output
+    function log(message, isError = false, isSuccess = false) {
+      const output = document.getElementById('test-output');
+      const line = document.createElement('div');
+      line.textContent = message;
+      
+      if (isError) {
+        line.className = 'error';
+      } else if (isSuccess) {
+        line.className = 'success';
+      }
+      
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
+    }
+    
+    // Override console functions to log to our output
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalGroup = console.group;
+    const originalGroupEnd = console.groupEnd;
+    
+    function formatArg(arg) {
+      if (typeof arg === 'string') {
+        // Handle color formatting in console.log
+        if (arg.includes('%c')) {
+          return arg.replace(/%c/g, '');
+        }
+        return arg;
+      } else if (arg === null) {
+        return 'null';
+      } else if (arg === undefined) {
+        return 'undefined';
+      } else if (typeof arg === 'object') {
+        try {
+          return JSON.stringify(arg, null, 2);
+        } catch (e) {
+          return String(arg);
+        }
+      } else {
+        return String(arg);
+      }
+    }
+    
+    console.log = (...args) => {
+      originalLog(...args);
+      const message = args.map(arg => formatArg(arg)).join(' ');
+      
+      // Check for success/error indicators
+      if (message.includes('✅')) {
+        log(message, false, true);
+      } else {
+        log(message);
+      }
+    };
+    
+    console.error = (...args) => {
+      originalError(...args);
+      const message = args.map(arg => formatArg(arg)).join(' ');
+      log(message, true);
+    };
+    
+    console.group = (label) => {
+      originalGroup(label);
+      log(`\n== ${label} ==`);
+    };
+    
+    console.groupEnd = () => {
+      originalGroupEnd();
+      log('');
+    };
+    
+    // Initialize the test harness
+    document.addEventListener('DOMContentLoaded', () => {
+      const runButton = document.getElementById('run-tests-btn');
+      const editorContainer = document.getElementById('editor-container');
+      const output = document.getElementById('test-output');
+      
+      runButton.addEventListener('click', () => {
+        // Clear previous results
+        output.innerHTML = '';
+        
+        log('Running editor integration tests...');
+        
+        try {
+          const result = EditorIntegrationTest.runTests(editorContainer);
+          
+          if (result) {
+            log('✅ All editor integration tests completed successfully!', false, true);
+          } else {
+            log('❌ Some editor integration tests failed!', true);
+          }
+        } catch (error) {
+          log('❌ Error during test execution: ' + error.toString(), true);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

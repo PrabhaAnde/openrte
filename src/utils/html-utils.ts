@@ -300,7 +300,7 @@ export function sanitizeHtml(html: string): string {
     return tempElement.innerHTML;
   }
   
-  /**
+    /**
    * Creates a unique string that can be used as an ID
    * 
    * @returns Unique string ID

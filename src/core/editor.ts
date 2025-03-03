@@ -5,6 +5,9 @@ import { setupContentEditable, focusElement } from '../utils/browser-utils';
 import { sanitizeHtml, normalizeHtml } from '../utils/html-utils';
 import { DocumentModel } from '../model/document-model';
 import { HTMLParser } from '../model/html-parser';
+import { SelectionModel } from '../model/selection-model';
+import { SelectionObserver } from '../model/selection-observer';
+import { DocumentPosition, DocumentRange } from '../model/selection-interfaces';
 
 /**
  * Main editor class for OpenRTE
@@ -45,6 +48,9 @@ export class Editor {
  */
   private documentModel: DocumentModel;
 
+  private selectionModel!: SelectionModel;
+  private selectionObserver!: SelectionObserver;
+
   
   /**
    * Constructor
@@ -71,6 +77,13 @@ export class Editor {
 
     // Parse initial content to model (optional in Phase 2A)
     this.parseContentToModel();
+
+    // Initialize selection model
+    this.selectionModel = new SelectionModel(this.documentModel);
+    
+    // Initialize selection observer
+    this.selectionObserver = new SelectionObserver(this, this.selectionModel);
+    this.selectionObserver.startObserving();
   }
 
     /**
@@ -311,6 +324,47 @@ export class Editor {
       selection
     });
   };
+
+  /**
+   * Get the selection model
+   */
+  getSelectionModel(): SelectionModel {
+    return this.selectionModel;
+  }
+  
+  /**
+   * Get the current document selection range
+   */
+  getDocumentRange(): DocumentRange | null {
+    return this.selectionModel.toDocumentRange();
+  }
+  
+  /**
+   * Set selection to a document range
+   */
+  setDocumentRange(range: DocumentRange): void {
+    this.selectionModel.setSelection(range.start, range.end);
+    
+    // Emit event
+    this.pluginRegistry.emit('editor:modelselectionchange', {
+      selectionModel: this.selectionModel,
+      editor: this
+    });
+  }
+  
+  /**
+   * Export selection to a serializable format for storage
+   */
+  exportSelection(): any {
+    return this.selectionModel.serialize();
+  }
+  
+  /**
+   * Import selection from a serialized format
+   */
+  importSelection(serialized: any): boolean {
+    return this.selectionModel.deserialize(serialized);
+  }
   
   /**
    * Register a plugin
@@ -438,5 +492,8 @@ export class Editor {
     
     // Emit destroy event
     this.pluginRegistry.emit('editor:destroy', { editor: this });
+
+     // Stop selection observing
+     this.selectionObserver.stopObserving();
   }
 }

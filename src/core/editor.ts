@@ -8,6 +8,7 @@ import { HTMLParser } from '../model/html-parser';
 import { SelectionModel } from '../model/selection-model';
 import { SelectionObserver } from '../model/selection-observer';
 import { DocumentPosition, DocumentRange } from '../model/selection-interfaces';
+import { RenderingManager, RenderStats } from '../model/rendering-manager';
 
 /**
  * Main editor class for OpenRTE
@@ -50,6 +51,7 @@ export class Editor {
 
   private selectionModel!: SelectionModel;
   private selectionObserver!: SelectionObserver;
+  private renderingManager!: RenderingManager;
 
   
   /**
@@ -84,6 +86,8 @@ export class Editor {
     // Initialize selection observer
     this.selectionObserver = new SelectionObserver(this, this.selectionModel);
     this.selectionObserver.startObserving();
+
+    this.renderingManager = new RenderingManager(this.contentArea, this.documentModel);
   }
 
     /**
@@ -324,6 +328,26 @@ export class Editor {
       selection
     });
   };
+
+  /**
+ * Render the document model to DOM
+ */
+  renderDocument(): void {
+    this.renderingManager.render();
+    
+    // Emit event after rendering
+    this.pluginRegistry.emit('editor:modelrendered', {
+      editor: this,
+      stats: this.renderingManager.getRenderStats()
+    });
+  }
+
+  /**
+   * Get rendering statistics
+   */
+  getRenderingStats(): RenderStats {
+    return this.renderingManager.getRenderStats();
+  }
 
   /**
    * Get the selection model

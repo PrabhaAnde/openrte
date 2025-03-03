@@ -1,4 +1,5 @@
 import { Editor } from '../core/editor';
+import { PluginModelAdapter } from '../model/plugin-model-adapter';
 
 /**
  * Plugin interface for OpenRTE
@@ -27,6 +28,9 @@ export interface Plugin {
   
   /**
    * Execute the plugin's primary action
+   * 
+   * In hybrid mode, this method should determine whether to use
+   * model-based or DOM-based execution based on availability
    */
   execute(): void;
   
@@ -40,6 +44,23 @@ export interface Plugin {
    * 
    * @param event The event name
    * @param data The event data
+   * @optional
    */
   onPluginEvent?(event: string, data: any): void;
+  
+  /**
+   * Gets the model adapter for this plugin
+   * 
+   * @returns The model adapter or undefined if not supported
+   * @optional
+   */
+  getModelAdapter?(): PluginModelAdapter;
+  
+  /**
+   * Indicates if this plugin supports the document model
+   * 
+   * @returns True if this plugin supports the document model
+   * @optional
+   */
+  supportsDocumentModel?(): boolean;
 }

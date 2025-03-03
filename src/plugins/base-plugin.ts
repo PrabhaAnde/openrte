@@ -2,6 +2,7 @@ import { Plugin } from '../types/plugin';
 import { Editor } from '../core/editor';
 import { EventBus } from '../core/event-bus';
 import { IconName, createIcon } from '../ui/icon';
+import { PluginModelAdapter } from '../model/plugin-model-adapter';
 
 /**
  * Base implementation of the Plugin interface
@@ -143,9 +144,69 @@ export abstract class BasePlugin implements Plugin {
   }
   
   /**
-   * Execute the plugin's primary action
+   * Indicates if this plugin supports the document model
+   * 
+   * @returns True if this plugin supports the document model
    */
-  abstract execute(): void;
+  supportsDocumentModel(): boolean {
+    return typeof this.getModelAdapter === 'function';
+  }
+  
+  /**
+   * Execute the plugin's primary action
+   * 
+   * This implementation checks for model support and falls back to DOM-based
+   * execution if model is not supported.
+   */
+  execute(): void {
+    if (!this.editor) return;
+    
+    if (this.supportsDocumentModel() && typeof this.getModelAdapter === 'function') {
+      // Use model-based execution if supported
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        const adapter = this.getModelAdapter();
+        adapter.applyToModel(model, range);
+        this.editor.renderDocument();
+        
+        // Emit event for model execution
+        this.emitEvent('model-execute', {
+          model,
+          range,
+          plugin: this
+        });
+        
+        return;
+      }
+    }
+    
+    // Fall back to DOM-based execution
+    this.executeDOMBased();
+    
+    // Emit event for DOM execution
+    this.emitEvent('dom-execute', {
+      plugin: this
+    });
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   * 
+   * This must be implemented by each plugin to provide the DOM-based
+   * implementation of the plugin's action.
+   */
+  protected abstract executeDOMBased(): void;
+  
+  /**
+   * Gets the model adapter for this plugin
+   * 
+   * May be overridden by plugins that support the document model
+   * 
+   * @returns The model adapter for this plugin
+   */
+  getModelAdapter?(): PluginModelAdapter;
   
   /**
    * Clean up any resources

@@ -9,6 +9,8 @@ import { SelectionModel } from '../model/selection-model';
 import { SelectionObserver } from '../model/selection-observer';
 import { DocumentPosition, DocumentRange } from '../model/selection-interfaces';
 import { RenderingManager, RenderStats } from '../model/rendering-manager';
+import { HTMLSerializer, SerializerOptions } from '../model/html-serializer';
+import { AdapterRegistry } from '../model/adapter-registry';
 
 /**
  * Main editor class for OpenRTE
@@ -52,6 +54,7 @@ export class Editor {
   private selectionModel!: SelectionModel;
   private selectionObserver!: SelectionObserver;
   private renderingManager!: RenderingManager;
+  private adapterRegistry!: AdapterRegistry;
 
   
   /**
@@ -88,6 +91,9 @@ export class Editor {
     this.selectionObserver.startObserving();
 
     this.renderingManager = new RenderingManager(this.contentArea, this.documentModel);
+
+    // Initialize adapter registry
+    this.adapterRegistry = new AdapterRegistry();
   }
 
     /**
@@ -330,6 +336,95 @@ export class Editor {
   };
 
   /**
+   * Get the adapter registry
+   * 
+   * @returns Adapter registry
+   */
+  getAdapterRegistry(): AdapterRegistry {
+    return this.adapterRegistry;
+  }
+  
+  /**
+   * Set content with model round-trip
+   * 
+   * This method sets content by going through the document model,
+   * which ensures that the model is updated and maintains backward compatibility.
+   * 
+   * @param html HTML content
+   * @param options Options for parsing and serializing
+   */
+  setContentWithModel(html: string, options?: SerializerOptions): void {
+    // Sanitize and normalize HTML
+    const sanitized = sanitizeHtml(html);
+    const normalized = normalizeHtml(sanitized);
+    
+    // Parse to model
+    const document = HTMLParser.parseProcessedHtml(normalized, this.documentModel);
+    this.documentModel.setDocument(document as any);
+    
+    // Serialize back to HTML
+    const serialized = HTMLSerializer.toHTML(document, options);
+    
+    // Set content in DOM
+    this.contentArea.innerHTML = serialized;
+    
+    // Ensure there's at least one paragraph
+    this.ensureContent();
+    
+    // Emit content change event
+    this.pluginRegistry.emit('editor:contentchange', {
+      html: serialized,
+      editor: this
+    });
+    
+    // Emit model change event
+    this.pluginRegistry.emit('editor:modelchange', {
+      model: this.documentModel,
+      editor: this
+    });
+  }
+  
+  /**
+   * Execute a plugin by name
+   * 
+   * @param pluginName Name of the plugin to execute
+   * @param params Optional parameters for the plugin
+   * @returns True if the plugin was executed
+   */
+  executePlugin(pluginName: string, params?: any): boolean {
+    const plugin = this.pluginRegistry.getPlugin(pluginName);
+    if (!plugin) return false;
+    
+    // Check if plugin supports model operations
+    if (plugin.supportsDocumentModel && plugin.supportsDocumentModel()) {
+      const adapter = this.adapterRegistry.getAdapter(pluginName);
+      const model = this.documentModel;
+      const range = this.selectionModel.toDocumentRange();
+      
+      if (adapter && model && range) {
+        // Execute model operation
+        adapter.applyToModel(model, range, params);
+        
+        // Render changes
+        this.renderDocument();
+        
+        // Emit event
+        this.pluginRegistry.emit('editor:modeloperation', {
+          plugin: pluginName,
+          params,
+          editor: this
+        });
+        
+        return true;
+      }
+    }
+    
+    // Fall back to regular plugin execution
+    plugin.execute();
+    return true;
+  }
+
+  /**
  * Render the document model to DOM
  */
   renderDocument(): void {
@@ -403,6 +498,15 @@ export class Editor {
     
     // Add the plugin's toolbar control
     this.toolbar.appendChild(plugin.createToolbarControl());
+    
+    // Register model adapter if available
+    if (plugin.supportsDocumentModel && plugin.supportsDocumentModel() && 
+        typeof plugin.getModelAdapter === 'function') {
+      const adapter = plugin.getModelAdapter();
+      if (adapter) {
+        this.adapterRegistry.register(plugin.getName(), adapter);
+      }
+    }
   }
   
   /**
@@ -519,5 +623,6 @@ export class Editor {
 
      // Stop selection observing
      this.selectionObserver.stopObserving();
+     this.adapterRegistry.clear();
   }
 }

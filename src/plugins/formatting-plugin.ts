@@ -1,6 +1,7 @@
 import { BasePlugin } from './base-plugin';
 import { Editor } from '../core/editor';
 import { IconName } from '../ui/icon';
+import { PluginModelAdapter } from '../model/plugin-model-adapter';
 
 /**
  * Interface for formatting options
@@ -72,13 +73,15 @@ export abstract class FormattingPlugin extends BasePlugin {
     if (this.eventBus) {
       this.eventBus.on('editor:selectionchange', this.updateButtonState);
       this.eventBus.on('editor:selectionupdate', this.updateButtonState);
+      this.eventBus.on('editor:modelselectionchange', this.updateButtonState);
+      this.eventBus.on('editor:modelrendered', this.updateButtonState);
     }
   }
   
   /**
-   * Execute the formatting action
+   * DOM-based execution for backward compatibility
    */
-  execute(): void {
+  protected executeDOMBased(): void {
     if (!this.editor) return;
     
     const selectionManager = this.editor.getSelectionManager();
@@ -91,12 +94,6 @@ export abstract class FormattingPlugin extends BasePlugin {
     
     // Update button state after execution
     this.updateButtonState();
-    
-    // Emit formatting event
-    this.emitEvent('format', {
-      tagNames: this.formattingOptions.tagNames,
-      defaultTag: this.formattingOptions.defaultTag
-    });
   }
   
   /**
@@ -105,8 +102,26 @@ export abstract class FormattingPlugin extends BasePlugin {
   protected updateButtonState = (): void => {
     if (!this.editor) return;
     
-    const selectionManager = this.editor.getSelectionManager();
-    const hasFormatting = selectionManager.hasFormatting(this.formattingOptions.tagNames);
+    let hasFormatting = false;
+    
+    // Try to use model if supported
+    if (this.supportsDocumentModel() && typeof this.getModelAdapter === 'function') {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        const adapter = this.getModelAdapter();
+        hasFormatting = adapter.getStateFromModel(model, range);
+      } else {
+        // Fall back to DOM-based detection
+        const selectionManager = this.editor.getSelectionManager();
+        hasFormatting = selectionManager.hasFormatting(this.formattingOptions.tagNames);
+      }
+    } else {
+      // Fall back to DOM-based detection
+      const selectionManager = this.editor.getSelectionManager();
+      hasFormatting = selectionManager.hasFormatting(this.formattingOptions.tagNames);
+    }
     
     // Update button active state
     this.button.classList.toggle('active', hasFormatting);

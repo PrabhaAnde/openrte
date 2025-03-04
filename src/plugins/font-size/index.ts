@@ -44,6 +44,16 @@ export class FontSizePlugin extends BasePlugin {
   
   execute(): void {
     // The dropdown handles execution directly
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   * This plugin uses the dropdown for execution, so this is a no-op
+   */
+  protected executeDOMBased(): void {
+    // No default action for font size plugin
+    // Font size selection is handled by the dropdown
   }
   
   createToolbarControl(): HTMLElement {

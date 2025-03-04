@@ -1,14 +1,19 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
 import { createIcon } from '../../ui/icon';
+import { ListsModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
+import { DocumentRange } from '../../model/selection-interfaces';
 
 type ListType = 'ol' | 'ul';
 
 export class ListsPlugin extends BasePlugin {
   private listButtons: Map<ListType, HTMLElement> = new Map();
+  private modelAdapter: ListsModelAdapter;
   
   constructor() {
     super('lists', null, 'Lists', 'openrte-lists-control');
+    this.modelAdapter = new ListsModelAdapter();
   }
   
   init(editor: Editor): void {
@@ -380,6 +385,22 @@ export class ListsPlugin extends BasePlugin {
         }
       }
     }
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   */
+  protected executeDOMBased(): void {
+    // This is a container plugin, individual list types have their own execute
+    // For DOM-based execution, we'll toggle the unordered list by default
+    this.toggleList('ul');
+  }
+  
+  /**
+   * Return the model adapter for this plugin
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
   }
   
   destroy(): void {

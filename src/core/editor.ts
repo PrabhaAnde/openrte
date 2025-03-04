@@ -11,11 +11,17 @@ import { DocumentPosition, DocumentRange } from '../model/selection-interfaces';
 import { RenderingManager, RenderStats } from '../model/rendering-manager';
 import { HTMLSerializer, SerializerOptions } from '../model/html-serializer';
 import { AdapterRegistry } from '../model/adapter-registry';
+import { HistoryManager } from '../model/history-manager';
+import { CollaborationClient, CollaborationConfig } from '../collaboration/collaboration-client';
 
 /**
  * Main editor class for OpenRTE
  */
 export class Editor {
+  /**
+   * Collaboration client
+   */
+  private collaborationClient: CollaborationClient | null = null;
   /**
    * The container element
    */
@@ -55,6 +61,7 @@ export class Editor {
   private selectionObserver!: SelectionObserver;
   private renderingManager!: RenderingManager;
   private adapterRegistry!: AdapterRegistry;
+  private historyManager!: HistoryManager;
 
   
   /**
@@ -94,15 +101,19 @@ export class Editor {
 
     // Initialize adapter registry
     this.adapterRegistry = new AdapterRegistry();
+    
+    // Initialize history manager
+    this.historyManager = new HistoryManager(this.documentModel);
   }
 
     /**
    * Parse current content to document model
-   * This is a one-way operation in Phase 2A
+   *
+   * @param options Parser options
    */
-  private parseContentToModel(): void {
+  private parseContentToModel(options?: import('../model/html-parser').ParserOptions): void {
     const html = this.contentArea.innerHTML;
-    const document = HTMLParser.parseProcessedHtml(html, this.documentModel);
+    const document = HTMLParser.parseProcessedHtml(html, this.documentModel, options);
     this.documentModel.setDocument(document as any);
   }
   
@@ -213,7 +224,22 @@ export class Editor {
     // Handle special keys if not handled by plugins
     if (event.defaultPrevented) return;
     
-    // Add specific editor key handling here
+    // Handle undo/redo keyboard shortcuts
+    if (event.ctrlKey || event.metaKey) {
+      if (event.key === 'z' && !event.shiftKey) {
+        // Ctrl+Z or Cmd+Z for undo
+        event.preventDefault();
+        this.undo();
+        return;
+      } else if ((event.key === 'y') || (event.key === 'z' && event.shiftKey)) {
+        // Ctrl+Y or Cmd+Y or Ctrl+Shift+Z or Cmd+Shift+Z for redo
+        event.preventDefault();
+        this.redo();
+        return;
+      }
+    }
+    
+    // Add other specific editor key handling here
   };
   
   /**
@@ -346,24 +372,28 @@ export class Editor {
   
   /**
    * Set content with model round-trip
-   * 
+   *
    * This method sets content by going through the document model,
    * which ensures that the model is updated and maintains backward compatibility.
-   * 
+   *
    * @param html HTML content
    * @param options Options for parsing and serializing
    */
-  setContentWithModel(html: string, options?: SerializerOptions): void {
-    // Sanitize and normalize HTML
-    const sanitized = sanitizeHtml(html);
-    const normalized = normalizeHtml(sanitized);
+  setContentWithModel(html: string, options?: {
+    parserOptions?: import('../model/html-parser').ParserOptions,
+    serializerOptions?: SerializerOptions
+  }): void {
+    // Parse to model with enhanced options
+    const document = HTMLParser.parseProcessedHtml(
+      html,
+      this.documentModel,
+      options?.parserOptions
+    );
     
-    // Parse to model
-    const document = HTMLParser.parseProcessedHtml(normalized, this.documentModel);
     this.documentModel.setDocument(document as any);
     
-    // Serialize back to HTML
-    const serialized = HTMLSerializer.toHTML(document, options);
+    // Serialize back to HTML with options
+    const serialized = HTMLSerializer.toHTML(document, options?.serializerOptions);
     
     // Set content in DOM
     this.contentArea.innerHTML = serialized;
@@ -402,8 +432,14 @@ export class Editor {
       const range = this.selectionModel.toDocumentRange();
       
       if (adapter && model && range) {
+        // Start a batch operation for history
+        this.historyManager.startBatch();
+        
         // Execute model operation
         adapter.applyToModel(model, range, params);
+        
+        // End the batch operation
+        this.historyManager.endBatch();
         
         // Render changes
         this.renderDocument();
@@ -547,35 +583,160 @@ export class Editor {
   
   /**
    * Set the editor content
-   * 
+   *
    * @param html HTML content
+   * @param options Parser options
    */
-  setContent(html: string): void {
-    // Sanitize and normalize HTML
-    const sanitized = sanitizeHtml(html);
-    const normalized = normalizeHtml(sanitized);
+  setContent(html: string, options?: import('../model/html-parser').ParserOptions): void {
+    // Create parser options with forced sanitize and normalize
+    const parserOptions = {
+      ...options,
+      sanitize: true,
+      normalize: true
+    };
     
+    // Parse to model first to ensure proper normalization
+    const document = HTMLParser.parseProcessedHtml(html, this.documentModel, parserOptions);
+    
+    // Serialize back to HTML
+    const normalized = HTMLSerializer.toHTML(document);
+    
+    // Set content in DOM
     this.contentArea.innerHTML = normalized;
     
     // Ensure there's at least one paragraph
     this.ensureContent();
-
     
+    // Set the document model
+    this.documentModel.setDocument(document as any);
     
     // Emit content change event
     this.pluginRegistry.emit('editor:contentchange', {
       html: normalized,
       editor: this
     });
-
-    this.parseContentToModel();
+    
+    // Emit model change event
+    this.pluginRegistry.emit('editor:modelchange', {
+      model: this.documentModel,
+      editor: this
+    });
   }
 
   /**
- * Get the document model
- */
+   * Get the document model
+   */
   getDocumentModel(): DocumentModel {
     return this.documentModel;
+  }
+  
+  /**
+   * Get the history manager
+   */
+  getHistoryManager(): HistoryManager {
+    return this.historyManager;
+  }
+  
+  /**
+   * Undo last operation
+   */
+  undo(): boolean {
+    const result = this.historyManager.undo();
+    if (result) {
+      // Re-render the document
+      this.renderDocument();
+      
+      // Emit undo event
+      this.pluginRegistry.emit('editor:undo', { editor: this });
+    }
+    return result;
+  }
+  
+  /**
+   * Redo previously undone operation
+   */
+  redo(): boolean {
+    const result = this.historyManager.redo();
+    if (result) {
+      // Re-render the document
+      this.renderDocument();
+      
+      // Emit redo event
+      this.pluginRegistry.emit('editor:redo', { editor: this });
+    }
+    return result;
+  }
+  
+  /**
+   * Render the document model to HTML
+   *
+   * @param options Serializer options
+   * @returns HTML string
+   */
+  renderModelToHTML(options?: SerializerOptions): string {
+    const document = this.documentModel.getDocument();
+    return HTMLSerializer.toHTML(document, options);
+  }
+  
+  /**
+   * Enable collaboration mode
+   *
+   * @param config Collaboration configuration
+   */
+  enableCollaboration(config: CollaborationConfig): void {
+    if (this.collaborationClient) {
+      this.disableCollaboration();
+    }
+    
+    this.collaborationClient = new CollaborationClient(this, config);
+    this.collaborationClient.connect();
+    
+    // Replace history manager with collaborative one
+    this.historyManager = this.collaborationClient.getHistoryManager();
+    
+    // Emit event
+    this.pluginRegistry.emit('editor:collaboration', {
+      enabled: true,
+      editor: this
+    });
+  }
+  
+  /**
+   * Disable collaboration mode
+   */
+  disableCollaboration(): void {
+    if (this.collaborationClient) {
+      this.collaborationClient.disconnect();
+      this.collaborationClient = null;
+      
+      // Re-initialize history manager
+      this.historyManager = new HistoryManager(this.documentModel);
+      
+      // Emit event
+      this.pluginRegistry.emit('editor:collaboration', {
+        enabled: false,
+        editor: this
+      });
+    }
+  }
+  
+  /**
+   * Check if collaboration is enabled
+   *
+   * @returns True if collaboration is enabled
+   */
+  isCollaborationEnabled(): boolean {
+    return this.collaborationClient !== null;
+  }
+  
+  /**
+   * Set a new history manager
+   * This allows replacing the default with a collaborative one
+   *
+   * @param historyManager History manager
+   */
+  setHistoryManager(historyManager: HistoryManager): void {
+    this.historyManager = historyManager;
   }
   
   /**
@@ -621,8 +782,11 @@ export class Editor {
     // Emit destroy event
     this.pluginRegistry.emit('editor:destroy', { editor: this });
 
-     // Stop selection observing
-     this.selectionObserver.stopObserving();
-     this.adapterRegistry.clear();
+    // Stop selection observing
+    this.selectionObserver.stopObserving();
+    
+    // Clear registries and managers
+    this.adapterRegistry.clear();
+    this.historyManager.clear();
   }
 }

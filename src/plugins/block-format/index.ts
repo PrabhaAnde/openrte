@@ -1,5 +1,7 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { BlockFormatModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
 interface FormatOption {
   tag: string;
@@ -8,6 +10,7 @@ interface FormatOption {
 
 export class BlockFormatPlugin extends BasePlugin {
   private formatDropdown: HTMLSelectElement;
+  private modelAdapter: BlockFormatModelAdapter;
   private options: FormatOption[] = [
     { tag: 'p', label: 'Paragraph' },
     { tag: 'h1', label: 'Heading 1' },
@@ -25,6 +28,9 @@ export class BlockFormatPlugin extends BasePlugin {
     
     // Create dropdown (will be properly initialized in createToolbarControl)
     this.formatDropdown = document.createElement('select');
+    
+    // Initialize model adapter
+    this.modelAdapter = new BlockFormatModelAdapter();
   }
   
   init(editor: Editor): void {
@@ -84,13 +90,41 @@ export class BlockFormatPlugin extends BasePlugin {
     this.editor.focus();
   };
   
+  /**
+   * Return the model adapter for this plugin
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
+  }
+  
+  /**
+   * DOM-based execution (for backward compatibility)
+   */
+  protected executeDOMBased(format?: string, level?: number): void {
+    if (!this.editor) return;
+    
+    // If format is provided, use it; otherwise, get from dropdown
+    const selectedFormat = format || this.formatDropdown.value;
+    
+    if (!selectedFormat) return;
+    
+    this.applyFormat(selectedFormat);
+  }
+  
   private applyFormat(tag: string): void {
     if (!this.editor) return;
     
-    const selectionManager = this.editor.getSelectionManager();
-    selectionManager.applyToSelection(range => {
-      this.applyFormatToRange(range, tag);
-    });
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel() && this.editor.getDocumentModel() && this.editor.getDocumentRange()) {
+      // Model-based execution is handled by the base class execute() method
+      this.execute();
+    } else {
+      // DOM-based execution
+      const selectionManager = this.editor.getSelectionManager();
+      selectionManager.applyToSelection(range => {
+        this.applyFormatToRange(range, tag);
+      });
+    }
     
     // Update dropdown state
     this.updateDropdownState();

@@ -1,5 +1,7 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { LineSpacingModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
 interface SpacingOption {
   value: string;
@@ -8,6 +10,7 @@ interface SpacingOption {
 
 export class LineSpacingPlugin extends BasePlugin {
   private spacingDropdown: HTMLSelectElement;
+  private modelAdapter: LineSpacingModelAdapter;
   private options: SpacingOption[] = [
     { value: '1', label: 'Single' },
     { value: '1.15', label: '1.15' },
@@ -23,6 +26,9 @@ export class LineSpacingPlugin extends BasePlugin {
     
     // Create dropdown (will be properly initialized in createToolbarControl)
     this.spacingDropdown = document.createElement('select');
+    
+    // Initialize model adapter
+    this.modelAdapter = new LineSpacingModelAdapter();
   }
   
   init(editor: Editor): void {
@@ -34,6 +40,25 @@ export class LineSpacingPlugin extends BasePlugin {
   
   execute(): void {
     // The dropdown handles execution directly
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   * This plugin uses the dropdown for execution, so this is a no-op
+   */
+  protected executeDOMBased(): void {
+    // No default action for line spacing plugin
+    // Line spacing selection is handled by the dropdown
+  }
+  
+  /**
+   * Get the model adapter for this plugin
+   *
+   * @returns The model adapter
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
   }
   
   createToolbarControl(): HTMLElement {
@@ -73,7 +98,22 @@ export class LineSpacingPlugin extends BasePlugin {
     
     if (!selectedSpacing) return;
     
-    this.applyLineSpacing(selectedSpacing);
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        this.modelAdapter.applyToModel(model, range, { spacing: selectedSpacing });
+        this.editor.renderDocument();
+      } else {
+        // Fall back to DOM-based implementation
+        this.applyLineSpacing(selectedSpacing);
+      }
+    } else {
+      // Use DOM-based implementation
+      this.applyLineSpacing(selectedSpacing);
+    }
     
     // Reset dropdown
     dropdown.selectedIndex = 0;
@@ -221,26 +261,23 @@ export class LineSpacingPlugin extends BasePlugin {
   private updateDropdownState = (): void => {
     if (!this.editor) return;
     
-    const range = this.editor.getSelectionManager().getRange();
-    if (!range) return;
-    
-    // Find current line spacing
-    let node = range.commonAncestorContainer;
-    
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentNode as Node;
-    }
-    
     let lineHeight: string | null = null;
     
-    // Find the closest block with line height
-    while (node && node !== this.editor.getContentArea()) {
-      const element = node as HTMLElement;
-      if (this.isBlockElement(element) && element.style.lineHeight) {
-        lineHeight = element.style.lineHeight;
-        break;
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        const state = this.modelAdapter.getStateFromModel(model, range);
+        lineHeight = state.spacing;
+      } else {
+        // Fall back to DOM-based detection
+        lineHeight = this.getDOMLineSpacing();
       }
-      node = node.parentNode as Node;
+    } else {
+      // Use DOM-based detection
+      lineHeight = this.getDOMLineSpacing();
     }
     
     // Update dropdown
@@ -256,6 +293,34 @@ export class LineSpacingPlugin extends BasePlugin {
     // Default to placeholder if no spacing found
     this.spacingDropdown.selectedIndex = 0;
   };
+  
+  /**
+   * Get the current line spacing from the DOM
+   */
+  private getDOMLineSpacing(): string | null {
+    if (!this.editor) return null;
+    
+    const range = this.editor.getSelectionManager().getRange();
+    if (!range) return null;
+    
+    // Find current line spacing
+    let node = range.commonAncestorContainer;
+    
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode as Node;
+    }
+    
+    // Find the closest block with line height
+    while (node && node !== this.editor.getContentArea()) {
+      const element = node as HTMLElement;
+      if (this.isBlockElement(element) && element.style.lineHeight) {
+        return element.style.lineHeight;
+      }
+      node = node.parentNode as Node;
+    }
+    
+    return null;
+  }
   
   destroy(): void {
     document.removeEventListener('selectionchange', this.updateDropdownState);

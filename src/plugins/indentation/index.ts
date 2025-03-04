@@ -1,10 +1,13 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
 import { createIcon } from '../../ui/icon';
+import { IndentationModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
 export class IndentationPlugin extends BasePlugin {
   private indentButton: HTMLElement;
   private outdentButton: HTMLElement;
+  private modelAdapter: IndentationModelAdapter;
   
   constructor() {
     // We'll override the createToolbarControl method
@@ -13,6 +16,9 @@ export class IndentationPlugin extends BasePlugin {
     // Create temporary buttons (will be replaced in createToolbarControl)
     this.indentButton = document.createElement('button');
     this.outdentButton = document.createElement('button');
+    
+    // Initialize model adapter
+    this.modelAdapter = new IndentationModelAdapter();
   }
   
   init(editor: Editor): void {
@@ -21,6 +27,25 @@ export class IndentationPlugin extends BasePlugin {
   
   execute(): void {
     // This is a container plugin, indent and outdent have their own methods
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   * This plugin doesn't have a single primary action, so this is a no-op
+   */
+  protected executeDOMBased(): void {
+    // No default action for indentation plugin
+    // Indent and outdent are handled by their own methods
+  }
+  
+  /**
+   * Get the model adapter for this plugin
+   *
+   * @returns The model adapter
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
   }
   
   createToolbarControl(): HTMLElement {
@@ -64,6 +89,19 @@ export class IndentationPlugin extends BasePlugin {
   private indent(): void {
     if (!this.editor) return;
     
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        this.modelAdapter.applyToModel(model, range, { increase: true });
+        this.editor.renderDocument();
+        return;
+      }
+    }
+    
+    // Fall back to DOM-based implementation
     const selectionManager = this.editor.getSelectionManager();
     selectionManager.applyToSelection(range => {
       this.indentRange(range);
@@ -73,6 +111,19 @@ export class IndentationPlugin extends BasePlugin {
   private outdent(): void {
     if (!this.editor) return;
     
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        this.modelAdapter.applyToModel(model, range, { increase: false });
+        this.editor.renderDocument();
+        return;
+      }
+    }
+    
+    // Fall back to DOM-based implementation
     const selectionManager = this.editor.getSelectionManager();
     selectionManager.applyToSelection(range => {
       this.outdentRange(range);

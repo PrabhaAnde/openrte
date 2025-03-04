@@ -21,6 +21,13 @@ export class LinkPlugin extends BasePlugin {
   }
   
   execute(): void {
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   */
+  protected executeDOMBased(): void {
     if (!this.editor) return;
     
     // Implement link insertion logic

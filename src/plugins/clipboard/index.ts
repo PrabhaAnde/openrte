@@ -36,6 +36,16 @@ export class ClipboardPlugin extends BasePlugin {
   
   execute(): void {
     // This is a container plugin, cut/copy/paste have their own methods
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   * This plugin doesn't have a single primary action, so this is a no-op
+   */
+  protected executeDOMBased(): void {
+    // No default action for clipboard plugin
+    // Individual actions (cut/copy/paste) are handled by their own methods
   }
   
   createToolbarControl(): HTMLElement {

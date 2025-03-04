@@ -1,16 +1,22 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
 import { createIcon } from '../../ui/icon';
+import { AlignmentModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
 type AlignType = 'left' | 'center' | 'right' | 'justify';
 
 export class AlignmentPlugin extends BasePlugin {
   private alignButtons: Map<AlignType, HTMLElement> = new Map();
   private currentAlignment: AlignType = 'left';
+  private modelAdapter: AlignmentModelAdapter;
 
   constructor() {
     // We'll override the createToolbarControl method, so we use an empty label here
     super('alignment', null, '', 'openrte-alignment-control');
+    
+    // Initialize model adapter
+    this.modelAdapter = new AlignmentModelAdapter();
   }
 
   init(editor: Editor): void {
@@ -26,9 +32,26 @@ export class AlignmentPlugin extends BasePlugin {
     }
   }
 
+  /**
+   * Return the model adapter for this plugin
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
+  }
+  
+  /**
+   * DOM-based execution (for backward compatibility)
+   */
+  protected executeDOMBased(alignment?: AlignType): void {
+    if (!this.editor || !alignment) return;
+    
+    this.applyAlignment(alignment);
+  }
+  
   execute(): void {
     // This is a container plugin, so the main execute is not used
     // Instead, each alignment type has its own execute method
+    // The base class execute() will use the model adapter if available
   }
 
   createToolbarControl(): HTMLElement {
@@ -77,10 +100,31 @@ export class AlignmentPlugin extends BasePlugin {
     
     this.currentAlignment = type;
     
-    const selectionManager = this.editor.getSelectionManager();
-    selectionManager.applyToSelection(range => {
-      this.applyAlignmentToRange(range, type);
-    });
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel() && this.editor.getDocumentModel() && this.editor.getDocumentRange()) {
+      // Use model-based execution
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        this.modelAdapter.applyToModel(model, range, { alignment: type });
+        this.editor.renderDocument();
+        
+        // Emit event for model execution
+        this.emitEvent('model-execute', {
+          model,
+          range,
+          plugin: this,
+          alignment: type
+        });
+      }
+    } else {
+      // Fall back to DOM-based execution
+      const selectionManager = this.editor.getSelectionManager();
+      selectionManager.applyToSelection(range => {
+        this.applyAlignmentToRange(range, type);
+      });
+    }
     
     // Update button states
     this.updateButtonStates();
@@ -151,28 +195,41 @@ export class AlignmentPlugin extends BasePlugin {
   private updateButtonStates = (): void => {
     if (!this.editor) return;
     
-    const range = this.editor.getSelectionManager().getRange();
-    if (!range) return;
-    
-    // Find current alignment
     let currentAlignment: AlignType = 'left'; // Default
     
-    // Find the block element
-    let node: Node | null = range.commonAncestorContainer;
-    
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentNode;
-    }
-    
-    const blockElement = this.findBlockElement(node as HTMLElement);
-    
-    if (blockElement) {
-      const textAlign = blockElement.style.textAlign || 
-                       window.getComputedStyle(blockElement).textAlign;
+    // Check if we can use the model adapter
+    if (this.supportsDocumentModel() && this.editor.getDocumentModel() && this.editor.getDocumentRange()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
       
-      if (textAlign === 'left' || textAlign === 'center' || 
-          textAlign === 'right' || textAlign === 'justify') {
-        currentAlignment = textAlign as AlignType;
+      if (model && range) {
+        const state = this.modelAdapter.getStateFromModel(model, range);
+        if (state && state.alignment) {
+          currentAlignment = state.alignment;
+        }
+      }
+    } else {
+      // Fall back to DOM-based state detection
+      const range = this.editor.getSelectionManager().getRange();
+      if (!range) return;
+      
+      // Find the block element
+      let node: Node | null = range.commonAncestorContainer;
+      
+      if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentNode;
+      }
+      
+      const blockElement = this.findBlockElement(node as HTMLElement);
+      
+      if (blockElement) {
+        const textAlign = blockElement.style.textAlign ||
+                         window.getComputedStyle(blockElement).textAlign;
+        
+        if (textAlign === 'left' || textAlign === 'center' ||
+            textAlign === 'right' || textAlign === 'justify') {
+          currentAlignment = textAlign as AlignType;
+        }
       }
     }
     

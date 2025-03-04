@@ -2,12 +2,31 @@ import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
 import { createColorPicker, ColorOption } from '../../ui/color-picker';
 import { createIcon } from '../../ui/icon';
+import { TextColorModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
+/**
+ * Plugin for text color formatting
+ */
 export class TextColorPlugin extends BasePlugin {
+  /**
+   * The model adapter for this plugin
+   */
+  private modelAdapter: TextColorModelAdapter;
+  
+  /**
+   * Color picker element
+   */
   private colorPicker: HTMLElement;
+  
+  /**
+   * Current color
+   */
   private currentColor: string = 'black';
   
-  // Default color options
+  /**
+   * Default color options
+   */
   private colors: ColorOption[] = [
     { color: 'black', label: 'Black' },
     { color: 'red', label: 'Red' },
@@ -19,20 +38,14 @@ export class TextColorPlugin extends BasePlugin {
     { color: 'white', label: 'White' }
   ];
   
+  /**
+   * Constructor
+   */
   constructor() {
-    super('textColor', null, 'Text Color', 'openrte-text-color-button');
+    super('textColor', 'textColor', 'Text Color', 'openrte-text-color-button');
     
-    // Add indicator to the button
-    this.button.style.position = 'relative';
-    const colorIndicator = document.createElement('div');
-    colorIndicator.style.width = '100%';
-    colorIndicator.style.height = '3px';
-    colorIndicator.style.backgroundColor = this.currentColor;
-    colorIndicator.style.position = 'absolute';
-    colorIndicator.style.bottom = '0';
-    colorIndicator.style.left = '0';
-    colorIndicator.style.borderRadius = '0 0 3px 3px';
-    this.button.appendChild(colorIndicator);
+    // Initialize model adapter
+    this.modelAdapter = new TextColorModelAdapter();
     
     // Create color picker
     this.colorPicker = createColorPicker(this.colors, this.onColorSelect.bind(this));
@@ -44,21 +57,26 @@ export class TextColorPlugin extends BasePlugin {
     
     // Close color picker when clicking outside
     document.addEventListener('click', this.closeColorPicker.bind(this));
-    
-    // Add selection listener to ensure we can detect color in selection
-    document.addEventListener('selectionchange', this.updateColorState);
   }
-
+  
+  /**
+   * Initialize the plugin
+   */
   init(editor: Editor): void {
     super.init(editor);
     
-    // Add listener for the custom selection update event
+    // Add selection change listener to update button state
+    document.addEventListener('selectionchange', this.updateColorState);
+    
     if (editor) {
       const contentArea = editor.getContentArea();
       contentArea.addEventListener('selectionupdate', this.updateColorState);
     }
   }
-
+  
+  /**
+   * Create toolbar button
+   */
   createToolbarControl(): HTMLElement {
     const button = super.createToolbarControl();
     
@@ -80,13 +98,23 @@ export class TextColorPlugin extends BasePlugin {
     return button;
   }
   
-  execute(): void {
-    if (!this.editor) return;
-    
-    const selectionManager = this.editor.getSelectionManager();
-    selectionManager.applyToSelection(this.applyTextColor.bind(this));
+  /**
+   * Get the model adapter for this plugin
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
   }
   
+  /**
+   * DOM-based execution for backward compatibility
+   */
+  protected executeDOMBased(): void {
+    // This will be handled by color picker interaction
+  }
+  
+  /**
+   * Toggle color picker visibility
+   */
   private toggleColorPicker(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
@@ -103,6 +131,9 @@ export class TextColorPlugin extends BasePlugin {
     }
   }
   
+  /**
+   * Close color picker when clicking outside
+   */
   private closeColorPicker(event: MouseEvent): void {
     // Skip if clicking the button
     if (event.target === this.button || this.button.contains(event.target as Node)) {
@@ -117,6 +148,9 @@ export class TextColorPlugin extends BasePlugin {
     this.colorPicker.style.display = 'none';
   }
   
+  /**
+   * Handle color selection
+   */
   private onColorSelect(color: string): void {
     this.currentColor = color;
     
@@ -126,156 +160,75 @@ export class TextColorPlugin extends BasePlugin {
       indicator.style.backgroundColor = color;
     }
     
-    // Apply the color to the selection
-    this.execute();
+    // Apply color to the selection
+    if (this.editor && this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        this.modelAdapter.applyToModel(model, range, { color });
+        this.editor.renderDocument();
+      } else {
+        // Fall back to DOM-based approach
+        this.applyColorToSelection(color);
+      }
+    } else {
+      // DOM-based approach
+      this.applyColorToSelection(color);
+    }
+    
+    // Hide the color picker
+    this.colorPicker.style.display = 'none';
+    
+    // Focus back on the editor
+    if (this.editor) {
+      this.editor.focus();
+    }
   }
   
+  /**
+   * Apply color to the current selection (DOM-based)
+   */
+  private applyColorToSelection(color: string): void {
+    if (!this.editor) return;
+    
+    // Use execCommand for backward compatibility
+    document.execCommand('foreColor', false, color);
+  }
+  
+  /**
+   * Update color state based on current selection
+   */
   private updateColorState = (): void => {
     if (!this.editor) return;
     
-    const range = this.editor.getSelectionManager().getRange();
-    if (!range) return;
-    
-    // Find current color in selection
-    let currentColor = this.getSelectionColor(range);
-    
-    // Update button indicator if a color is found
-    if (currentColor) {
-      const indicator = this.button.querySelector('div');
-      if (indicator) {
-        indicator.style.backgroundColor = currentColor;
+    // Try to use model if supported
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        const state = this.modelAdapter.getStateFromModel(model, range);
+        if (state.hasColor && state.color) {
+          // Update color
+          this.currentColor = state.color;
+          
+          // Update indicator
+          const indicator = this.button.querySelector('div');
+          if (indicator) {
+            indicator.style.backgroundColor = state.color;
+          }
+        }
       }
-      this.currentColor = currentColor;
+    } else {
+      // DOM-based approach (simplified)
+      // Would need more implementation to extract current text color
     }
   };
   
-  private getSelectionColor(range: Range): string | null {
-    if (!this.editor) return null;
-    
-    // If range is collapsed (cursor only), check ancestors
-    if (range.collapsed) {
-      let node = range.commonAncestorContainer;
-      if (node.nodeType === Node.TEXT_NODE) {
-        node = node.parentNode as Node;
-      }
-      
-      return this.getNodeColor(node as HTMLElement);
-    }
-    
-    // For actual selections, check if there's a span with color
-    const existingColorSpan = this.findExistingColorSpan(range);
-    if (existingColorSpan && existingColorSpan.style.color) {
-      return existingColorSpan.style.color;
-    }
-    
-    return null;
-  }
-  
-  private getNodeColor(element: HTMLElement): string | null {
-    if (!element) return null;
-    
-    // Check if element has a color style
-    if (element.style && element.style.color) {
-      return element.style.color;
-    }
-    
-    // Check computed style
-    const computedStyle = window.getComputedStyle(element);
-    if (computedStyle.color !== 'rgb(0, 0, 0)') { // Not default black
-      return computedStyle.color;
-    }
-    
-    return null;
-  }
-  
-  private applyTextColor(range: Range): void {
-    if (range.collapsed) return;
-    
-    // Store current selection for restoration
-    const savedSelection = {
-      startContainer: range.startContainer,
-      startOffset: range.startOffset,
-      endContainer: range.endContainer,
-      endOffset: range.endOffset
-    };
-    
-    // Find if the selection is already inside a text color span
-    const existingColorSpan = this.findExistingColorSpan(range);
-    
-    if (existingColorSpan) {
-      // Update existing span's color
-      existingColorSpan.style.color = this.currentColor;
-    } else {
-      // Create a new span with the color
-      const span = document.createElement('span');
-      span.style.color = this.currentColor;
-      
-      try {
-        range.surroundContents(span);
-      } catch (e) {
-        // Handle complex selections
-        const fragment = range.extractContents();
-        span.appendChild(fragment);
-        range.insertNode(span);
-      }
-    }
-    
-    // Hide the color picker after selection
-    this.colorPicker.style.display = 'none';
-    
-    // Restore selection - makes the change visible and allows immediate follow-up edits
-    try {
-      if (this.editor) {
-        const newRange = document.createRange();
-        newRange.setStart(savedSelection.startContainer, savedSelection.startOffset);
-        newRange.setEnd(savedSelection.endContainer, savedSelection.endOffset);
-        this.editor.getSelectionManager().setRange(newRange);
-      }
-    } catch (e) {
-      console.warn('Could not restore selection after color change');
-    }
-  }
-  
-  // Helper method to find existing color span that contains the current selection
-  private findExistingColorSpan(range: Range): HTMLElement | null {
-    if (!this.editor) return null;
-    
-    let node = range.commonAncestorContainer;
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentNode as Node;
-    }
-    
-    let current = node as HTMLElement;
-    
-    // Look up to find a span with color that fully contains the selection
-    while (current && current !== this.editor.getContentArea()) {
-      if (current.nodeName === 'SPAN' && 
-          current.style && 
-          current.style.color && 
-          this.elementContainsRange(current, range)) {
-        return current;
-      }
-      if (!current.parentNode) break;
-      current = current.parentNode as HTMLElement;
-    }
-    
-    return null;
-  }
-  
-  // Check if an element fully contains the range
-  private elementContainsRange(element: HTMLElement, range: Range): boolean {
-    try {
-      const nodeRange = document.createRange();
-      nodeRange.selectNodeContents(element);
-      
-      return nodeRange.compareBoundaryPoints(Range.START_TO_START, range) <= 0 &&
-             nodeRange.compareBoundaryPoints(Range.END_TO_END, range) >= 0;
-    } catch (e) {
-      console.warn('Error checking element range containment:', e);
-      return false;
-    }
-  }
-  
+  /**
+   * Clean up resources
+   */
   destroy(): void {
     document.removeEventListener('click', this.closeColorPicker);
     document.removeEventListener('selectionchange', this.updateColorState);
@@ -285,9 +238,11 @@ export class TextColorPlugin extends BasePlugin {
       contentArea.removeEventListener('selectionupdate', this.updateColorState);
     }
     
+    // Remove color picker from DOM
     if (this.colorPicker.parentNode) {
       this.colorPicker.parentNode.removeChild(this.colorPicker);
     }
+    
     super.destroy();
   }
 }

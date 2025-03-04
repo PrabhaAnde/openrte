@@ -26,3 +26,4 @@ export { FontSizePlugin } from './font-size';
 export { UndoRedoPlugin } from './undo-redo';
 export { ClipboardPlugin } from './clipboard';
 export { SpecialCharactersPlugin } from './special-characters';
+export { CollaborationPlugin } from './collaboration';

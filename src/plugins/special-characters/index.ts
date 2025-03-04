@@ -107,6 +107,16 @@ export class SpecialCharactersPlugin extends BasePlugin {
   
   execute(): void {
     // The dialog handles character insertion
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   * This plugin uses a dialog for character selection, so this is a no-op
+   */
+  protected executeDOMBased(): void {
+    // No default action for special characters plugin
+    // Character insertion is handled by the dialog
   }
   
   private createCharacterDialog(): HTMLElement {

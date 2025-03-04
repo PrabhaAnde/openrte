@@ -11,6 +11,13 @@ export class PageBreakPlugin extends BasePlugin {
   }
   
   execute(): void {
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   */
+  protected executeDOMBased(): void {
     if (!this.editor) return;
     
     this.insertPageBreak();

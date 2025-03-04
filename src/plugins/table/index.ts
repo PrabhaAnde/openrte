@@ -1,10 +1,15 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
 import { createIcon } from '../../ui/icon';
+import { TableModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
 export class TablePlugin extends BasePlugin {
+  private modelAdapter: TableModelAdapter;
+  
   constructor() {
     super('table', 'table', 'Insert Table', 'openrte-table-button');
+    this.modelAdapter = new TableModelAdapter();
   }
   
   init(editor: Editor): void {
@@ -20,6 +25,47 @@ export class TablePlugin extends BasePlugin {
   }
   
   execute(): void {
+    if (!this.editor) return;
+    
+    if (this.supportsDocumentModel() && typeof this.getModelAdapter === 'function') {
+      // Use model-based execution if supported
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      
+      if (model && range) {
+        // Table insertion implementation
+        const rows = parseInt(prompt('Number of rows:', '2') || '2', 10);
+        const cols = parseInt(prompt('Number of columns:', '2') || '2', 10);
+        
+        if (rows > 0 && cols > 0) {
+          const adapter = this.getModelAdapter();
+          adapter.applyToModel(model, range, {
+            action: 'createTable',
+            rows,
+            columns: cols
+          });
+          this.editor.renderDocument();
+          
+          // Emit event for model execution
+          this.emitEvent('model-execute', {
+            model,
+            range,
+            plugin: this
+          });
+          
+          return;
+        }
+      }
+    }
+    
+    // Fall back to DOM-based execution
+    this.executeDOMBased();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   */
+  protected executeDOMBased(): void {
     if (!this.editor) return;
     
     // Table insertion implementation
@@ -80,6 +126,13 @@ export class TablePlugin extends BasePlugin {
     
     // Focus editor
     this.editor.focus();
+  }
+  
+  /**
+   * Return the model adapter for this plugin
+   */
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
   }
   
   destroy(): void {

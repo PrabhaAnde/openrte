@@ -20,6 +20,13 @@ export class ImagePlugin extends BasePlugin {
   }
   
   execute(): void {
+    super.execute();
+  }
+  
+  /**
+   * DOM-based execution for backward compatibility
+   */
+  protected executeDOMBased(): void {
     if (!this.editor) return;
     
     // Image insertion implementation

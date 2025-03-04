@@ -1,29 +1,84 @@
 import { DocumentModel } from './document-model';
-import { DocumentNode, Mark, ElementNode, TextNode,NodeType } from './interfaces';
+import { DocumentNode, Mark, ElementNode, TextNode, NodeType } from './interfaces';
 import { sanitizeHtml, normalizeHtml } from '../utils/html-utils';
+
+/**
+ * Options for HTML parsing
+ */
+export interface ParserOptions {
+  /**
+   * Whether to sanitize HTML before parsing
+   */
+  sanitize?: boolean;
+  
+  /**
+   * Whether to normalize HTML before parsing
+   */
+  normalize?: boolean;
+  
+  /**
+   * Additional tag mappings
+   */
+  tagMappings?: Record<string, string>;
+  
+  /**
+   * Whether to preserve whitespace
+   */
+  preserveWhitespace?: boolean;
+  
+  /**
+   * Whether to add data attributes for node IDs
+   */
+  includeNodeIds?: boolean;
+}
 
 /**
  * HTML Parser for converting HTML to document model
  */
 export class HTMLParser {
   /**
+   * Default parser options
+   */
+  private static defaultOptions: ParserOptions = {
+    sanitize: true,
+    normalize: true,
+    preserveWhitespace: false,
+    includeNodeIds: false
+  };
+
+  /**
    * Parses HTML string to document model
-   * 
+   *
    * @param html HTML string to parse
    * @param documentModel Document model instance
+   * @param options Parser options
    * @returns The parsed document node
    */
-  static parse(html: string, documentModel: DocumentModel): DocumentNode {
+  static parse(html: string, documentModel: DocumentModel, options: ParserOptions = {}): DocumentNode {
+    // Merge options with defaults
+    const mergedOptions = { ...this.defaultOptions, ...options };
+    
+    // Process HTML
+    let processedHtml = html;
+    
+    if (mergedOptions.sanitize) {
+      processedHtml = sanitizeHtml(processedHtml);
+    }
+    
+    if (mergedOptions.normalize) {
+      processedHtml = normalizeHtml(processedHtml);
+    }
+    
     // Create a temporary element to parse the HTML
     const tempElement = document.createElement('div');
-    tempElement.innerHTML = html;
+    tempElement.innerHTML = processedHtml;
     
     // Create the document root
     const root = documentModel.createElementNode('root');
     
     // Process all child nodes
     for (let i = 0; i < tempElement.childNodes.length; i++) {
-      const childNode = this.processNode(tempElement.childNodes[i], documentModel);
+      const childNode = this.processNode(tempElement.childNodes[i], documentModel, mergedOptions);
       if (childNode) {
         root.children.push(childNode);
       }
@@ -39,17 +94,18 @@ export class HTMLParser {
   
   /**
    * Process a DOM node into a document node
-   * 
+   *
    * @param domNode DOM node to process
    * @param documentModel Document model instance
+   * @param options Parser options
    * @returns Processed document node or null
    */
-  private static processNode(domNode: Node, documentModel: DocumentModel): DocumentNode | null {
+  private static processNode(domNode: Node, documentModel: DocumentModel, options: ParserOptions): DocumentNode | null {
     // Handle text nodes
     if (domNode.nodeType === Node.TEXT_NODE) {
       const text = domNode.textContent || '';
-      // Skip empty text nodes (just whitespace)
-      if (!text.trim()) return null;
+      // Skip empty text nodes unless preserving whitespace
+      if (!text.trim() && !options.preserveWhitespace) return null;
       return documentModel.createTextNode(text);
     }
     
@@ -58,8 +114,9 @@ export class HTMLParser {
       const element = domNode as HTMLElement;
       const tagName = element.tagName.toLowerCase();
       
-      // Map HTML tags to node types
-      const nodeType = this.mapTagToNodeType(tagName);
+      // Map HTML tags to node types, using custom mappings if provided
+      const mappedTag = options.tagMappings?.[tagName] || tagName;
+      const nodeType = this.mapTagToNodeType(mappedTag);
       
       // Create attributes object
       const attributes: Record<string, string> = {};
@@ -71,14 +128,35 @@ export class HTMLParser {
       if (tagName.match(/^h[1-6]$/)) {
         // Extract heading level from h1-h6 tags
         attributes['level'] = tagName.substring(1);
+      } else if (tagName === 'ol') {
+        attributes['list-type'] = 'ordered';
+      } else if (tagName === 'ul') {
+        attributes['list-type'] = 'bullet';
+      } else if (tagName === 'a' && element.hasAttribute('href')) {
+        attributes['href'] = element.getAttribute('href') || '';
+      } else if (tagName === 'img') {
+        if (element.hasAttribute('src')) {
+          attributes['src'] = element.getAttribute('src') || '';
+        }
+        if (element.hasAttribute('alt')) {
+          attributes['alt'] = element.getAttribute('alt') || '';
+        }
+      } else if (tagName === 'th') {
+        attributes['cell-type'] = 'header';
       }
       
       // Create element node
       const elementNode = documentModel.createElementNode(nodeType, attributes);
       
+      // Add node ID as data attribute if requested
+      if (options.includeNodeIds) {
+        elementNode.attributes = elementNode.attributes || {};
+        elementNode.attributes['data-node-id'] = elementNode.id;
+      }
+      
       // Process child nodes
       for (let i = 0; i < element.childNodes.length; i++) {
-        const childNode = this.processNode(element.childNodes[i], documentModel);
+        const childNode = this.processNode(element.childNodes[i], documentModel, options);
         if (childNode) {
           elementNode.children.push(childNode);
         }
@@ -147,7 +225,7 @@ export class HTMLParser {
   
   /**
    * Apply a mark to all text children of an element
-   * 
+   *
    * @param element Element node containing text to mark
    * @param tagName HTML tag name
    * @param documentModel Document model instance
@@ -157,8 +235,30 @@ export class HTMLParser {
     tagName: string,
     documentModel: DocumentModel
   ): void {
-    // Map tag to mark type
-    const markType = this.mapTagToMarkType(tagName);
+    // Map tag to mark type (initially)
+    let markType = this.mapTagToMarkType(tagName);
+    
+    // Extract mark value if applicable
+    let markValue: string | undefined;
+    
+    // Handle special cases for marks with values
+    if (tagName === 'span' && element.attributes) {
+      const style = element.attributes['style'] || '';
+      
+      // Extract color value
+      const colorMatch = style.match(/color:\s*([^;]+)/i);
+      if (colorMatch) {
+        markType = 'color';
+        markValue = colorMatch[1].trim();
+      }
+      
+      // Extract background color value
+      const bgMatch = style.match(/background-color:\s*([^;]+)/i);
+      if (bgMatch) {
+        markType = 'background';
+        markValue = bgMatch[1].trim();
+      }
+    }
     
     // Process all children, adding the mark to text nodes
     for (let i = 0; i < element.children.length; i++) {
@@ -167,7 +267,10 @@ export class HTMLParser {
       if (child.type === 'text') {
         const textNode = child as TextNode;
         const marks = textNode.marks || [];
-        marks.push({ type: markType });
+        marks.push({
+          type: markType,
+          value: markValue
+        });
         textNode.marks = marks;
       }
     }
@@ -202,17 +305,21 @@ export class HTMLParser {
   
   /**
    * Parse sanitized and normalized HTML to document model
-   * 
+   *
    * @param html Raw HTML string
    * @param documentModel Document model instance
+   * @param options Parser options (sanitize and normalize will be forced to true)
    * @returns The parsed document node
    */
-  static parseProcessedHtml(html: string, documentModel: DocumentModel): DocumentNode {
-    // Sanitize and normalize HTML
-    const sanitized = sanitizeHtml(html);
-    const normalized = normalizeHtml(sanitized);
+  static parseProcessedHtml(html: string, documentModel: DocumentModel, options: ParserOptions = {}): DocumentNode {
+    // Create options with forced sanitize and normalize
+    const processOptions: ParserOptions = {
+      ...options,
+      sanitize: true,
+      normalize: true
+    };
     
-    // Parse the processed HTML
-    return this.parse(normalized, documentModel);
+    // Parse with processing options
+    return this.parse(html, documentModel, processOptions);
   }
 }

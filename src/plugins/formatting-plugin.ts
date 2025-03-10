@@ -11,7 +11,7 @@ export interface FormattingOptions {
 
 export abstract class FormattingPlugin extends BasePlugin {
   protected formattingOptions: FormattingOptions;
-  
+
   constructor(
     id: string,
     name: IconName | null,
@@ -22,7 +22,7 @@ export abstract class FormattingPlugin extends BasePlugin {
     super(id, name, title, buttonClass);
     this.formattingOptions = formattingOptions;
   }
-  
+
   init(editor: Editor): void {
     super.init(editor);
     document.addEventListener('selectionchange', this.updateButtonState);
@@ -31,7 +31,7 @@ export abstract class FormattingPlugin extends BasePlugin {
       contentArea.addEventListener('selectionupdate', this.updateButtonState);
     }
   }
-  
+
   protected executeDOMBased(): void {
     if (!this.editor) return;
     
@@ -41,19 +41,18 @@ export abstract class FormattingPlugin extends BasePlugin {
       return;
     }
     
-    // Save selection to restore later
+    // Save the selection state
     const selection = window.getSelection();
     const savedRange = range.cloneRange();
     
-    // Use the native execCommand when possible (much more reliable)
     if (this.formattingOptions.command) {
       document.execCommand(
-        this.formattingOptions.command, 
-        false, 
+        this.formattingOptions.command,
+        false,
         this.formattingOptions.value || ''
       );
     } else {
-      // Fall back to manual toggle if no command is available
+      // Use the selection manager for more robust handling
       const hasFormatting = this.editor.getSelectionManager().hasFormatting(
         this.formattingOptions.tagNames
       );
@@ -69,21 +68,22 @@ export abstract class FormattingPlugin extends BasePlugin {
       }
     }
     
-    // Restore selection and focus
+    // Restore selection and focus more reliably
     setTimeout(() => {
       try {
-        selection?.removeAllRanges();
-        selection?.addRange(savedRange);
-        this.editor?.focus();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(savedRange);
+        }
       } catch (e) {
         console.warn("Selection restoration failed", e);
-        this.editor?.focus();
       }
+      this.editor?.focus();
     }, 0);
     
     this.updateButtonState();
   }
-  
+
   private updateButtonState = (): void => {
     if (!this.editor) return;
     
@@ -94,7 +94,7 @@ export abstract class FormattingPlugin extends BasePlugin {
     
     this.button.classList.toggle('active', hasFormatting);
   };
-  
+
   destroy(): void {
     document.removeEventListener('selectionchange', this.updateButtonState);
     if (this.editor) {

@@ -152,9 +152,11 @@ export class DocumentRenderer {
         return document.createElement('p');
       case 'heading': {
         const level = attributes.level ? parseInt(attributes.level, 10) : 2;
-        const validLevel = Math.max(1, Math.min(6, level)); // Ensure level is between 1-6
+        const validLevel = Math.max(1, Math.min(6, level));
         return document.createElement(`h${validLevel}`);
       }
+      case 'blockquote': // Add explicit handling for blockquote
+        return document.createElement('blockquote');
       case 'list': {
         const listType = attributes['list-type'] || 'bullet';
         return document.createElement(listType === 'ordered' ? 'ol' : 'ul');

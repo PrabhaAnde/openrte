@@ -154,7 +154,42 @@
   border-left: 4px solid var(--editor-border);
   padding-left: 16px;
   margin-left: 0;
+  margin-right: 0;
   font-style: italic;
+  color: var(--editor-text);
+}
+
+.openrte-content blockquote[indent="1"] {
+  margin-left: 20px;
+}
+
+.openrte-content blockquote[indent="2"] {
+  margin-left: 40px;
+}
+
+.openrte-content blockquote[indent="3"] {
+  margin-left: 60px;
+}
+
+.openrte-content blockquote[indent="4"] {
+  margin-left: 80px;
+}
+
+.openrte-content blockquote[indent="5"] {
+  margin-left: 100px;
+}
+
+/* Add styles for blockquote alignment */
+.openrte-content blockquote[align="center"] {
+  text-align: center;
+}
+
+.openrte-content blockquote[align="right"] {
+  text-align: right;
+}
+
+.openrte-content blockquote[align="justify"] {
+  text-align: justify;
 }
 
 /* Add to src/styles/editor.css */

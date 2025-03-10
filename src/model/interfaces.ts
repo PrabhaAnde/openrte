@@ -1,17 +1,18 @@
 /**
  * Node type enumeration for document model
  */
-export type NodeType = 
-  | 'root' 
-  | 'paragraph' 
-  | 'text' 
-  | 'heading' 
-  | 'list' 
-  | 'list-item' 
-  | 'link' 
-  | 'image' 
-  | 'table' 
-  | 'table-row' 
+export type NodeType =
+  | 'root'
+  | 'paragraph'
+  | 'text'
+  | 'heading'
+  | 'blockquote'  // Add blockquote as a node type
+  | 'list'
+  | 'list-item'
+  | 'link'
+  | 'image'
+  | 'table'
+  | 'table-row'
   | 'table-cell';
 
 /**

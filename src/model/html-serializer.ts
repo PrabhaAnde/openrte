@@ -290,6 +290,8 @@ export class HTMLSerializer {
    * @param node The element node
    * @returns HTML tag name
    */
+  // Add this to the mapNodeTypeToTag method in HTMLSerializer class
+
   private static mapNodeTypeToTag(node: ElementNode): string {
     const type = node.type;
     const attributes = node.attributes || {};
@@ -299,9 +301,11 @@ export class HTMLSerializer {
         return 'p';
       case 'heading': {
         const level = attributes.level ? parseInt(attributes.level, 10) : 2;
-        const validLevel = Math.max(1, Math.min(6, level)); // Ensure level is between 1-6
+        const validLevel = Math.max(1, Math.min(6, level));
         return `h${validLevel}`;
       }
+      case 'blockquote':
+        return 'blockquote'; // Ensure blockquote type maps to blockquote element
       case 'list': {
         const listType = attributes['list-type'] || 'bullet';
         return listType === 'ordered' ? 'ol' : 'ul';

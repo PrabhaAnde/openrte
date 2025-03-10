@@ -181,36 +181,41 @@ export class HTMLParser {
    * @param tagName HTML tag name
    * @returns Corresponding node type
    */
-  private static mapTagToNodeType(tagName: string): NodeType {
-    switch (tagName) {
-      case 'p': return 'paragraph';
-      case 'h1':
-      case 'h2':
-      case 'h3':
-      case 'h4':
-      case 'h5':
-      case 'h6':
-        return 'heading';
-      case 'ul':
-      case 'ol':
-        return 'list';
-      case 'li':
-        return 'list-item';
-      case 'a':
-        return 'link';
-      case 'img':
-        return 'image';
-      case 'table':
-        return 'table';
-      case 'tr':
-        return 'table-row';
-      case 'td':
-      case 'th':
-        return 'table-cell';
-      default:
-        return 'paragraph'; // Default fallback
-    }
+  // Update the mapTagToNodeType method in HTMLParser class
+
+private static mapTagToNodeType(tagName: string): NodeType {
+  switch (tagName) {
+    case 'p': return 'paragraph';
+    case 'h1':
+    case 'h2':
+    case 'h3':
+    case 'h4':
+    case 'h5':
+    case 'h6':
+      return 'heading';
+    case 'blockquote':
+      return 'blockquote'; // Add explicit mapping for blockquote
+    case 'ul':
+    case 'ol':
+      return 'list';
+    case 'li':
+      return 'list-item';
+    case 'a':
+      return 'link';
+    case 'img':
+      return 'image';
+    case 'table':
+      return 'table';
+    case 'tr':
+      return 'table-row';
+    case 'td':
+    case 'th':
+      return 'table-cell';
+    default:
+      return 'paragraph';
   }
+}
+
   
   /**
    * Check if element is for text formatting

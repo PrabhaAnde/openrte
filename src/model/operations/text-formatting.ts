@@ -15,66 +15,177 @@ export class TextFormattingOperations {
     markType: string,
     markValue?: string
   ): void {
-    // Get text nodes in range
-    const textNodes = this.getTextNodesInRange(model, range);
-    
-    // Apply mark to each text node
-    textNodes.forEach(node => {
-      const marks = node.marks || [];
+    // Handle case when selection is on a single text node
+    if (range.start.node.id === range.end.node.id && range.start.node.type === 'text') {
+      const textNode = range.start.node as TextNode;
+      const startOffset = range.start.offset;
+      const endOffset = range.end.offset;
+  
+      console.log(`Applying ${markType} to text node ${textNode.id} from ${startOffset} to ${endOffset}`);
       
-      // Check if mark already exists
-      const existingMarkIndex = marks.findIndex(m => m.type === markType);
-      
-      if (existingMarkIndex === -1) {
-        // Add new mark
-        marks.push({
-          type: markType as Mark['type'],
-          value: markValue
-        });
-      } else if (markValue !== undefined) {
-        // Update existing mark value
-        marks[existingMarkIndex].value = markValue;
+      // If the entire node is selected, simply add the mark
+      if (startOffset === 0 && endOffset === textNode.text.length) {
+        this.applyMarkToWholeNode(textNode, markType, markValue);
+        return;
       }
       
-      node.marks = marks;
+      // Otherwise we need to split the node into parts
+      this.applyMarkToTextNodePortion(model, textNode, startOffset, endOffset, markType, markValue);
+      return;
+    }
+    
+    // For selections spanning multiple nodes
+    console.log("Multi-node selection");
+    const textNodes = this.findExactNodesInRange(model, range);
+    console.log(`Found ${textNodes.length} text nodes in range`);
+    
+    // Process each node based on whether it's partially or fully selected
+    textNodes.forEach(node => {
+      this.applyMarkToWholeNode(node, markType, markValue);
     });
   }
   
-  /**
-   * Remove a mark from text in a range
-   */
-  static removeMark(
+  // Helper to apply mark to an entire node
+  private static applyMarkToWholeNode(textNode: TextNode, markType: string, markValue?: string): void {
+    const marks = textNode.marks || [];
+    const existingMarkIndex = marks.findIndex(m => m.type === markType);
+    
+    if (existingMarkIndex === -1) {
+      // Add new mark
+      marks.push({
+        type: markType as Mark['type'],
+        value: markValue
+      });
+    } else if (markValue !== undefined) {
+      // Update existing mark
+      marks[existingMarkIndex].value = markValue;
+    }
+    
+    textNode.marks = marks;
+    console.log(`Applied ${markType} to entire node ${textNode.id}`);
+  }
+  
+  // Helper to apply mark to part of a text node
+  private static applyMarkToTextNodePortion(
     model: DocumentModel,
-    range: DocumentRange,
-    markType: string
+    node: TextNode,
+    startOffset: number, 
+    endOffset: number,
+    markType: string,
+    markValue?: string
   ): void {
-    // Get text nodes in range
-    const textNodes = this.getTextNodesInRange(model, range);
+    // Create three segments: before, marked, and after
+    const beforeText = node.text.substring(0, startOffset);
+    const markedText = node.text.substring(startOffset, endOffset);
+    const afterText = node.text.substring(endOffset);
     
-    // Remove mark from each text node
-    textNodes.forEach(node => {
-      if (!node.marks) return;
-      
-      node.marks = node.marks.filter(mark => mark.type !== markType);
-      
-      // If no marks left, remove the marks array
-      if (node.marks.length === 0) {
-        delete node.marks;
-      }
-    });
+    const newNodes: TextNode[] = [];
+    
+    // Create the segments
+    if (beforeText) {
+      newNodes.push(model.createTextNode(beforeText, node.marks));
+    }
+    
+    if (markedText) {
+      const markedNode = model.createTextNode(markedText, [...(node.marks || [])]);
+      this.applyMarkToWholeNode(markedNode, markType, markValue);
+      newNodes.push(markedNode);
+    }
+    
+    if (afterText) {
+      newNodes.push(model.createTextNode(afterText, node.marks));
+    }
+    
+    // Replace the original node with these new segments
+    this.replaceNodeWithNodes(model, node, newNodes);
+    console.log(`Split node ${node.id} into ${newNodes.length} parts`);
   }
   
-  /**
-   * Toggle a mark in a range
-   */
+  // Helper to replace a node with new nodes
+  private static replaceNodeWithNodes(model: DocumentModel, oldNode: TextNode, newNodes: TextNode[]): void {
+    const document = model.getDocument();
+    this.replaceNodeInParent(document, oldNode.id, newNodes);
+  }
+  
+  // Helper to find a node in the document and replace it
+  private static replaceNodeInParent(node: DocumentNode, nodeId: string, replacementNodes: DocumentNode[]): boolean {
+    if (node.type === 'text') {
+      return false;
+    }
+    
+    const elementNode = node as ElementNode;
+    const index = elementNode.children.findIndex(child => child.id === nodeId);
+    
+    if (index !== -1) {
+      // Found the node, replace it
+      elementNode.children.splice(index, 1, ...replacementNodes);
+      return true;
+    }
+    
+    // Recursively search in children
+    for (const child of elementNode.children) {
+      if (child.type !== 'text') {
+        if (this.replaceNodeInParent(child, nodeId, replacementNodes)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Improved method to get exactly the nodes in a range
+  private static findExactNodesInRange(model: DocumentModel, range: DocumentRange): TextNode[] {
+    // For single node selections
+    if (range.start.node.id === range.end.node.id) {
+      if (range.start.node.type === 'text') {
+        return [range.start.node as TextNode];
+      }
+      return [];
+    }
+    
+    // For multi-node selections, traverse the DOM tree
+    const allTextNodes = this.collectTextNodes(model.getDocument());
+    const result: TextNode[] = [];
+    let inRange = false;
+    
+    for (const node of allTextNodes) {
+      if (node.id === range.start.node.id) {
+        inRange = true;
+        result.push(node);
+        continue;
+      }
+      
+      if (inRange) {
+        result.push(node);
+      }
+      
+      if (node.id === range.end.node.id) {
+        inRange = false;
+      }
+    }
+    
+    return result;
+  }
+  
+  // Completely rewritten toggle method
   static toggleMark(
     model: DocumentModel,
     range: DocumentRange,
     markType: string,
     markValue?: string
   ): void {
-    // Check if mark exists in range
+    // Check if selection is collapsed
+    if (!range || (range.start.node.id === range.end.node.id && range.start.offset === range.end.offset)) {
+      console.log("Cannot toggle mark on collapsed selection");
+      return;
+    }
+    
+    console.log(`Toggling mark ${markType} in range`);
+    
+    // Determine if mark exists in the range
     const hasMarkInRange = this.hasMarkInRange(model, range, markType);
+    console.log(`Mark ${markType} exists in range: ${hasMarkInRange}`);
     
     if (hasMarkInRange) {
       this.removeMark(model, range, markType);
@@ -82,6 +193,131 @@ export class TextFormattingOperations {
       this.applyMark(model, range, markType, markValue);
     }
   }
+  
+  // Improved removal of marks
+  static removeMark(
+    model: DocumentModel,
+    range: DocumentRange,
+    markType: string
+  ): void {
+    console.log(`Removing mark ${markType} from range`);
+    
+    // For single node selections
+    if (range.start.node.id === range.end.node.id && range.start.node.type === 'text') {
+      const textNode = range.start.node as TextNode;
+      const startOffset = range.start.offset;
+      const endOffset = range.end.offset;
+      
+      // If selection covers the entire node
+      if (startOffset === 0 && endOffset === textNode.text.length) {
+        this.removeMarkFromNode(textNode, markType);
+        return;
+      }
+      
+      // For partial selections, split the node
+      this.removeMarkFromTextNodePortion(model, textNode, startOffset, endOffset, markType);
+      return;
+    }
+    
+    // For multi-node selections
+    const textNodes = this.findExactNodesInRange(model, range);
+    textNodes.forEach(node => {
+      this.removeMarkFromNode(node, markType);
+    });
+  }
+  
+  // Helper to remove mark from a node
+  private static removeMarkFromNode(node: TextNode, markType: string): void {
+    if (!node.marks) return;
+    
+    node.marks = node.marks.filter(mark => mark.type !== markType);
+    
+    if (node.marks.length === 0) {
+      delete node.marks;
+    }
+    
+    console.log(`Removed ${markType} from node ${node.id}`);
+  }
+  
+  // Helper to remove mark from part of a text node
+  private static removeMarkFromTextNodePortion(
+    model: DocumentModel,
+    node: TextNode,
+    startOffset: number,
+    endOffset: number,
+    markType: string
+  ): void {
+    // Similar to apply but removing the mark
+    const beforeText = node.text.substring(0, startOffset);
+    const middleText = node.text.substring(startOffset, endOffset);
+    const afterText = node.text.substring(endOffset);
+    
+    const newNodes: TextNode[] = [];
+    
+    // Create segments
+    if (beforeText) {
+      newNodes.push(model.createTextNode(beforeText, node.marks));
+    }
+    
+    if (middleText) {
+      // Create middle node without the specified mark
+      const middleMarks = node.marks ? 
+        node.marks.filter(mark => mark.type !== markType) : 
+        undefined;
+      
+      newNodes.push(model.createTextNode(middleText, middleMarks?.length ? middleMarks : undefined));
+    }
+    
+    if (afterText) {
+      newNodes.push(model.createTextNode(afterText, node.marks));
+    }
+    
+    // Replace the node with these segments
+    this.replaceNodeWithNodes(model, node, newNodes);
+  }
+  
+  // Add this helper method to TextFormattingOperations
+  private static replaceTextNodeInParent(model: DocumentModel, oldNode: TextNode, newNodes: TextNode[]): void {
+    // Find the parent node
+    const document = model.getDocument();
+    const findParentResult = this.findParentWithChild(document, oldNode.id);
+    
+    if (findParentResult) {
+      const { parent, childIndex } = findParentResult;
+      // Replace the old node with the new nodes
+      parent.children.splice(childIndex, 1, ...newNodes);
+      console.log(`Replaced node ${oldNode.id} with ${newNodes.length} new nodes in parent ${parent.id}`);
+    } else {
+      console.error(`Could not find parent for node ${oldNode.id}`);
+    }
+  }
+  
+  // Add this helper method to TextFormattingOperations
+  private static findParentWithChild(node: DocumentNode, childId: string): { parent: ElementNode, childIndex: number } | null {
+    if (node.type === 'text') {
+      return null;
+    }
+    
+    const elementNode = node as ElementNode;
+    const childIndex = elementNode.children.findIndex(child => child.id === childId);
+    
+    if (childIndex !== -1) {
+      return { parent: elementNode, childIndex };
+    }
+    
+    for (const child of elementNode.children) {
+      if (child.type !== 'text') {
+        const result = this.findParentWithChild(child, childId);
+        if (result) {
+          return result;
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  
   
   /**
    * Check if a mark exists in a range
@@ -91,13 +327,29 @@ export class TextFormattingOperations {
     range: DocumentRange,
     markType: string
   ): boolean {
-    // Get text nodes in range
-    const textNodes = this.getTextNodesInRange(model, range);
+    // Get the text nodes in the range
+    const textNodes = this.findExactNodesInRange(model, range);
     
-    // Check if any node has the mark
-    return textNodes.some(node => 
-      node.marks && node.marks.some(mark => mark.type === markType)
-    );
+    // Single node case with partial selection
+    if (textNodes.length === 1 && range.start.node.id === range.end.node.id) {
+      const node = textNodes[0];
+      
+      // If it has the mark, consider it marked
+      if (node.marks && node.marks.some(mark => mark.type === markType)) {
+        return true;
+      }
+      
+      return false;
+    }
+    
+    // For multiple nodes, check if ANY node has the mark
+    for (const node of textNodes) {
+      if (node.marks && node.marks.some(mark => mark.type === markType)) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   /**
@@ -112,70 +364,58 @@ export class TextFormattingOperations {
       return [];
     }
     
-    // Start with all text nodes in the document
-    const allTextNodes = this.collectTextNodes(model.getDocument());
-    
-    // If we have path-based selection, we can filter more effectively
-    // For now, we'll use a simplified approach that leverages node IDs
-    
-    // Get the start and end node IDs
     const startNodeId = range.start.node.id;
     const endNodeId = range.end.node.id;
     
-    // If both start and end are the same text node
+    // Same node case - the simplest scenario
     if (startNodeId === endNodeId && range.start.node.type === 'text') {
+      // If it's the same text node, just return that one node
+      console.log("Single text node selection");
       return [range.start.node as TextNode];
     }
     
-    // Otherwise, we need to find all text nodes between start and end
-    // This is a simplified implementation
+    // Get all text nodes in the document for reference
+    const allTextNodes = this.collectTextNodes(model.getDocument());
+    
+    // Try to find nodes from start to end
     let inRange = false;
     const result: TextNode[] = [];
     
+    // First attempt: Look for nodes between start and end nodes (inclusive)
     for (const node of allTextNodes) {
-      // Start collecting when we find the start node
       if (node.id === startNodeId) {
         inRange = true;
       }
       
-      // If we're in range, collect the node
       if (inRange) {
         result.push(node);
       }
       
-      // Stop collecting after we find the end node
       if (node.id === endNodeId) {
         inRange = false;
       }
     }
     
-    // If we didn't find any nodes, it might mean the range is in a different order
-    // Try the reverse order
+    // If no nodes found, try reversing the direction (sometimes selection is backwards)
     if (result.length === 0) {
       inRange = false;
       for (const node of allTextNodes) {
-        // Start collecting when we find the end node
         if (node.id === endNodeId) {
           inRange = true;
         }
         
-        // If we're in range, collect the node
         if (inRange) {
           result.push(node);
         }
         
-        // Stop collecting after we find the start node
         if (node.id === startNodeId) {
           inRange = false;
         }
       }
     }
     
-    // If we still didn't find any nodes, fallback to all nodes
-    // This ensures we don't break existing functionality
+    // If still no nodes found, try using common ancestor approach
     if (result.length === 0) {
-      // As a fallback, if we're dealing with unknown node types,
-      // we'll find text nodes that are descendants of the common ancestor
       const startParents = this.getParentChain(range.start.node);
       const endParents = this.getParentChain(range.end.node);
       
@@ -188,12 +428,57 @@ export class TextFormattingOperations {
         }
       }
       
+      // If we found a common ancestor, get all text nodes within it
       if (commonAncestor) {
-        return this.collectTextNodes(commonAncestor);
+        const allNodesInAncestor = this.collectTextNodes(commonAncestor);
+        
+        // For large common ancestors, we need to be more selective
+        // Try to identify only the relevant text nodes based on position
+        if (allNodesInAncestor.length > 5) {
+          console.log("Large common ancestor with many text nodes, being selective");
+          
+          // Find the position of the start and end nodes in the array
+          const startIndex = allNodesInAncestor.findIndex(node => node.id === startNodeId);
+          const endIndex = allNodesInAncestor.findIndex(node => node.id === endNodeId);
+          
+          if (startIndex !== -1 && endIndex !== -1) {
+            // Use only the slice between start and end
+            const slice = allNodesInAncestor.slice(
+              Math.min(startIndex, endIndex),
+              Math.max(startIndex, endIndex) + 1
+            );
+            return slice;
+          }
+        }
+        
+        return allNodesInAncestor;
       }
     }
     
+    // Debug output
+    console.log(`Found ${result.length} text nodes in range from ${startNodeId} to ${endNodeId}`);
+    
     return result;
+  }
+  
+  // Add this helper method to the TextFormattingOperations class
+  private static isParentOf(potentialParent: DocumentNode, potentialChild: DocumentNode): boolean {
+    // Implementation of parent-child relationship check
+    if (potentialParent.type === 'text' || !('children' in potentialParent)) {
+      return false;
+    }
+    
+    const parentElement = potentialParent as ElementNode;
+    
+    // Direct child check
+    if (parentElement.children.some(child => child.id === potentialChild.id)) {
+      return true;
+    }
+    
+    // Recursive check for descendants
+    return parentElement.children.some(child => 
+      'children' in child && this.isParentOf(child as ElementNode, potentialChild)
+    );
   }
   
   /**

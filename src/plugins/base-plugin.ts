@@ -161,34 +161,15 @@ export abstract class BasePlugin implements Plugin {
   execute(): void {
     if (!this.editor) return;
     
-    if (this.supportsDocumentModel() && typeof this.getModelAdapter === 'function') {
-      // Use model-based execution if supported
-      const model = this.editor.getDocumentModel();
-      const range = this.editor.getDocumentRange();
-      
-      if (model && range) {
-        const adapter = this.getModelAdapter();
-        adapter.applyToModel(model, range);
-        this.editor.renderDocument();
-        
-        // Emit event for model execution
-        this.emitEvent('model-execute', {
-          model,
-          range,
-          plugin: this
-        });
-        
-        return;
-      }
-    }
-    
-    // Fall back to DOM-based execution
+    // Don't try to use the model for formatting operations anymore
+    // Always use DOM-based approach which is more reliable
     this.executeDOMBased();
+    this.emitEvent('execute', { plugin: this });
     
-    // Emit event for DOM execution
-    this.emitEvent('dom-execute', {
-      plugin: this
-    });
+    // Focus the editor afterward
+    setTimeout(() => {
+      this.editor?.focus();
+    }, 0);
   }
   
   /**

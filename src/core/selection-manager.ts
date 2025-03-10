@@ -469,61 +469,39 @@ export class SelectionManager {
   addFormatting(tagName: string): void {
     const range = this.getRange();
     if (!range) return;
+    if (range.collapsed) return; // Don't format if there's no selection
     
-    // Skip if range is collapsed
-    if (range.collapsed) return;
-    
-    // Store original selection boundaries for later restoration
+    // Save position information for later restoration
     const startContainer = range.startContainer;
     const startOffset = range.startOffset;
     const endContainer = range.endContainer;
     const endOffset = range.endOffset;
     
+    // Create the element and apply formatting
     const element = document.createElement(tagName);
-    
     try {
       range.surroundContents(element);
     } catch (e) {
-      // Handle complex selections
       const fragment = range.extractContents();
       element.appendChild(fragment);
       range.insertNode(element);
     }
     
-    // Try to restore original selection
+    // Carefully restore selection to approximately where it was
+    const newRange = document.createRange();
     try {
-      const newRange = document.createRange();
-      
-      // If we're selecting text inside the element
-      if (element.firstChild && element.lastChild) {
-        // Set start point
-        if (element.contains(startContainer)) {
-          newRange.setStart(startContainer, startOffset);
-        } else {
-          newRange.setStart(element.firstChild, 0);
-        }
-        
-        // Set end point
-        if (element.contains(endContainer)) {
-          newRange.setEnd(endContainer, endOffset);
-        } else {
-          const lastChild = element.lastChild;
-          const lastChildLength = lastChild.nodeType === Node.TEXT_NODE ? 
-            lastChild.textContent!.length : lastChild.childNodes.length;
-          newRange.setEnd(lastChild, lastChildLength);
-        }
-      } else {
-        // Fallback to selecting the whole element
-        this.selectNode(element);
-        return;
-      }
-      
-      // Set the new range as the selection
+      // Set selection to end of the formatted element
+      newRange.selectNodeContents(element);
+      newRange.collapse(false); // Collapse to end
       this.setRange(newRange);
     } catch (e) {
-      console.warn('Error restoring selection after formatting, falling back to element selection:', e);
-      // Fallback to selecting the element
+      console.warn('Error restoring selection after formatting:', e);
       this.selectNode(element);
+    }
+    
+    // Ensure we're focused in the right place
+    if (this.contentArea) {
+      this.contentArea.focus();
     }
   }
 
@@ -585,7 +563,18 @@ private findFormattingAncestors(range: Range, tagNames: string[]): HTMLElement[]
   }
   
   return result;
-}  
+}
+
+private getNodeDepth(node: Node): number {
+  let depth = 0;
+  let current = node;
+  while (current && current !== this.contentArea) {
+    depth++;
+    if (!current.parentNode) break;
+    current = current.parentNode;
+  }
+  return depth;
+}
   /**
    * Removes specific formatting from the current selection
    * 
@@ -594,193 +583,70 @@ private findFormattingAncestors(range: Range, tagNames: string[]): HTMLElement[]
   removeFormatting(tagNames: string[]): void {
     const range = this.getRange();
     if (!range) return;
-    
     console.log("Removing formatting for tags:", tagNames);
-    
-    // Store original selection points for later restoration
     const savedRange = this.saveSelection();
     
-    // Check if this is a word selection (double-click) or line selection (triple-click)
-    const isWordOrLineSelection = this.detectWordOrLineSelection(range);
-    console.log(`Is word/line selection: ${isWordOrLineSelection}`);
-    
-    // Normalize tagNames to uppercase for case-insensitive comparison
+    // Use a simpler approach that only affects the selected content
     const normalizedTagNames = tagNames.map(tag => tag.toUpperCase());
     
-    // Special handling for word/line selections
-    if (isWordOrLineSelection) {
-      // For word/line selection, we need to look at the entire content
-      const tempDiv = document.createElement('div');
-      tempDiv.appendChild(range.cloneContents());
-      
-      // First, try to directly query elements from cloned content
-      let elementsFound = false;
-      const elementsToUnwrap: HTMLElement[] = [];
-      
-      for (const tagName of normalizedTagNames) {
-        const elements = Array.from(tempDiv.getElementsByTagName(tagName));
-        console.log(`Found ${elements.length} ${tagName} elements in selection`);
-        
-        if (elements.length > 0) {
-          elementsFound = true;
-          
-          // Special approach for word/line selections:
-          // 1. Get the exact HTML content
-          const html = tempDiv.innerHTML;
-          console.log("Selection HTML:", html);
-          
-          // 2. Create a replacement with tags removed
-          let replacementHtml = html;
-          
-          // Create a regex to match each tag type
-          for (const tag of normalizedTagNames) {
-            const openTagRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
-            const closeTagRegex = new RegExp(`</${tag}>`, 'gi');
-            
-            // Remove opening and closing tags
-            replacementHtml = replacementHtml.replace(openTagRegex, '');
-            replacementHtml = replacementHtml.replace(closeTagRegex, '');
-          }
-          
-          console.log("Replacement HTML:", replacementHtml);
-          
-          // 3. Delete the current selection and insert the unformatted content
-          range.deleteContents();
-          
-          // Create a temporary element to hold the new content
-          const replacementDiv = document.createElement('div');
-          replacementDiv.innerHTML = replacementHtml;
-          
-          // Create a document fragment for insertion
-          const fragment = document.createDocumentFragment();
-          while (replacementDiv.firstChild) {
-            fragment.appendChild(replacementDiv.firstChild);
-          }
-          
-          // Insert the replacement content
-          range.insertNode(fragment);
-          
-          // Try to restore selection
-          if (savedRange) {
-            try {
-              this.restoreSelection(savedRange);
-            } catch (e) {
-              console.warn("Could not restore selection after word/line format removal");
-            }
-          }
-          
-          return;
-        }
-      }
-    }
-    
-    // Standard removal approach (for non-word/line selections or if special handling failed)
-    // Method 1: Try direct approach first - find and unwrap elements within range
+    // Find elements to unwrap within the selection
     const elements = findElementsInRange(range, tagNames);
     console.log("Found elements to remove:", elements.length);
     
-    if (elements.length === 0) {
-      // Method 2: If no elements found, check if we're inside a formatting element
-      const innerElements = this.findFormattingElementsInRange(range, normalizedTagNames);
+    if (elements.length > 0) {
+      // Process elements from innermost to outermost to avoid DOM structure issues
+      elements.sort((a, b) => {
+        // Sort by depth (higher depth = more nested)
+        const depthA = this.getNodeDepth(a);
+        const depthB = this.getNodeDepth(b);
+        return depthB - depthA; // Process deeper nodes first
+      });
       
+      elements.forEach(element => {
+        console.log("Unwrapping element:", element.tagName);
+        this.unwrapElement(element);
+      });
+    } else {
+      // If no elements found directly, try looking for formatting ancestors
+      const innerElements = this.findFormattingElementsInRange(range, normalizedTagNames);
       if (innerElements.length > 0) {
         console.log("Found formatting elements via alternate method:", innerElements.length);
-        
-        // Unwrap each element
         innerElements.forEach(element => {
           this.unwrapElement(element);
         });
-        
-        // Try to restore the selection
-        if (savedRange) {
-          this.restoreSelection(savedRange);
-        }
-        return;
-      }
-      
-      // Method 3: Try parent nodes approach
-      const ancestorElements = this.findFormattingAncestors(range, normalizedTagNames);
-      if (ancestorElements.length > 0) {
-        console.log("Found formatting ancestors:", ancestorElements.length);
-        
-        // Unwrap from outside in (in reverse order)
-        for (let i = ancestorElements.length - 1; i >= 0; i--) {
-          this.unwrapElement(ancestorElements[i]);
-        }
-        
-        // Try to restore the selection
-        if (savedRange) {
-          this.restoreSelection(savedRange);
-        }
-        return;
-      }
-      
-      // Method 4: Special handling for cross-node formatting
-      if (this.hasFormattingAcrossNodes(range, normalizedTagNames)) {
-        console.log("Using special handling for cross-node formatting");
-        
-        // Get the HTML content
-        const tempDiv = document.createElement('div');
-        tempDiv.appendChild(range.cloneContents());
-        const html = tempDiv.innerHTML;
-        
-        // Create a replacement with tags removed
-        let replacementHtml = html;
-        
-        // Remove opening and closing tags for each tag name
-        for (const tag of normalizedTagNames) {
-          const openTagRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
-          const closeTagRegex = new RegExp(`</${tag}>`, 'gi');
-          
-          replacementHtml = replacementHtml.replace(openTagRegex, '');
-          replacementHtml = replacementHtml.replace(closeTagRegex, '');
-        }
-        
-        // Replace content
-        range.deleteContents();
-        
-        // Create a temporary element
-        const replacementDiv = document.createElement('div');
-        replacementDiv.innerHTML = replacementHtml;
-        
-        // Create a document fragment
-        const fragment = document.createDocumentFragment();
-        while (replacementDiv.firstChild) {
-          fragment.appendChild(replacementDiv.firstChild);
-        }
-        
-        // Insert the replacement content
-        range.insertNode(fragment);
-        
-        // Try to restore the selection
-        if (savedRange) {
-          try {
-            this.restoreSelection(savedRange);
-          } catch (e) {
-            console.warn("Could not restore selection after cross-node format removal");
+      } else {
+        const ancestorElements = this.findFormattingAncestors(range, normalizedTagNames);
+        if (ancestorElements.length > 0) {
+          console.log("Found formatting ancestors:", ancestorElements.length);
+          for (let i = ancestorElements.length - 1; i >= 0; i--) {
+            this.unwrapElement(ancestorElements[i]);
           }
         }
-        
-        return;
       }
-      
-      // If we get here, we didn't find any elements to unwrap
-      console.log("No formatting elements found to remove");
-      if (savedRange) {
-        this.restoreSelection(savedRange);
-      }
-      return;
     }
     
-    // Process each element that needs formatting removed
-    elements.forEach(element => {
-      console.log("Unwrapping element:", element.tagName);
-      this.unwrapElement(element);
-    });
-    
-    // Try to restore the selection
+    // Restore selection carefully to prevent content deletion
     if (savedRange) {
-      this.restoreSelection(savedRange);
+      try {
+        this.restoreSelection(savedRange);
+      } catch (e) {
+        console.warn("Could not restore selection after format removal");
+        // Try to place cursor at a reasonable position
+        try {
+          if (elements.length > 0 && elements[0].parentNode) {
+            const newRange = document.createRange();
+            newRange.selectNodeContents(elements[0].parentNode);
+            newRange.collapse(false);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+            }
+          }
+        } catch (e2) {
+          console.warn("Fallback selection restoration also failed");
+        }
+      }
     }
   }
   
@@ -791,22 +657,16 @@ private findFormattingAncestors(range: Range, tagNames: string[]): HTMLElement[]
    * @returns True if it appears to be a word/line selection
    */
   private detectWordOrLineSelection(range: Range): boolean {
-    // Double-click typically selects a word boundary
-    // Triple-click typically selects a paragraph boundary or a line
-    
-    // Check for typical word selection patterns
-    if (range.startContainer === range.endContainer && 
+    if (range.startContainer === range.endContainer &&
         range.startContainer.nodeType === Node.TEXT_NODE) {
       const text = range.startContainer.textContent || '';
-      
       // Word selection usually selects a whole word
       // Look at the selection boundaries relative to word boundaries
       const beforeStart = text.substring(0, range.startOffset).trim();
       const afterEnd = text.substring(range.endOffset).trim();
       const selectedText = text.substring(range.startOffset, range.endOffset).trim();
-      
       // If selection starts at a word boundary and ends at a word boundary
-      if ((beforeStart === '' || beforeStart.endsWith(' ')) && 
+      if ((beforeStart === '' || beforeStart.endsWith(' ')) &&
           (afterEnd === '' || afterEnd.startsWith(' ')) &&
           selectedText.indexOf(' ') === -1) {
         console.log("Detected word selection");
@@ -814,40 +674,10 @@ private findFormattingAncestors(range: Range, tagNames: string[]): HTMLElement[]
       }
     }
     
-    // Check for line/paragraph selection (triple-click)
-    // Triple-click often selects the entire paragraph or line
-    if (range.startContainer !== range.endContainer) {
-      // Get common ancestor
-      let node = range.commonAncestorContainer;
-      
-      // If it's a text node, check its parent
-      if (node.nodeType === Node.TEXT_NODE && node.parentNode) {
-        node = node.parentNode;
-      }
-      
-      // If the common ancestor is a block element and the selection
-      // appears to cover most of it, treat as a line selection
-      if (node && node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as HTMLElement;
-        if (this.isBlockElement(element)) {
-          const tempDiv = document.createElement('div');
-          tempDiv.appendChild(range.cloneContents());
-          
-          // If the selection content has similar length to the entire block,
-          // it's likely a line selection
-          const selectionLength = tempDiv.textContent?.length || 0;
-          const elementLength = element.textContent?.length || 0;
-          
-          if (selectionLength > 0 && selectionLength / elementLength > 0.7) {
-            console.log("Detected line/paragraph selection");
-            return true;
-          }
-        }
-      }
-    }
-    
+    // Disable the aggressive line/paragraph detection
+    // This is the main cause of formatting being applied to entire lines
     return false;
-  }  
+  }
   /**
    * Checks if an element is a block-level element
    * 
@@ -863,6 +693,22 @@ private findFormattingAncestors(range: Range, tagNames: string[]): HTMLElement[]
     return blockElements.includes(element.tagName.toUpperCase());
   }
   
+  restoreCursorPosition(previousContainer: Node, previousOffset: number): void {
+    try {
+      const range = document.createRange();
+      range.setStart(previousContainer, previousOffset);
+      range.collapse(true);
+      this.setRange(range);
+      
+      // Ensure the content area is focused
+      if (this.contentArea) {
+        this.contentArea.focus();
+      }
+    } catch (e) {
+      console.error("Failed to restore cursor position:", e);
+    }
+  }
+
   /**
    * Toggles formatting on the current selection
    * 
@@ -870,35 +716,35 @@ private findFormattingAncestors(range: Range, tagNames: string[]): HTMLElement[]
    * @param defaultTag Tag to use when adding formatting
    */
   toggleFormatting(tagNames: string[], defaultTag: string): void {
-    // Store current selection state
     const range = this.getRange();
     if (!range) return;
     
-    // Check selection type (helpful for debugging)
-    const isWordSelection = this.detectWordOrLineSelection(range);
+    // Don't apply formatting if there's no actual text selected
+    if (range.collapsed) {
+      console.log("Cannot apply formatting to collapsed selection (cursor only)");
+      return;
+    }
     
-    // Check if formatting exists
+    // Save selection state
+    const savedRange = range.cloneRange();
+    
+    // Check if formatting already exists
     const hasFormat = this.hasFormatting(tagNames);
-    
-    console.log(`Toggle formatting: Has format? ${hasFormat}, Tags: ${tagNames.join(',')}, Default: ${defaultTag}`);
-    console.log(`Selection range: start=${range.startContainer.nodeName}[${range.startOffset}], end=${range.endContainer.nodeName}[${range.endOffset}]`);
-    console.log(`Is word/line selection: ${isWordSelection}`);
-    
-    // Get more details about the selection
-    const tempDiv = document.createElement('div');
-    tempDiv.appendChild(range.cloneContents());
-    console.log(`Selection HTML: ${tempDiv.innerHTML}`);
-    console.log(`Selection text: ${tempDiv.textContent}`);
+    console.log(`Toggle formatting: Has format? ${hasFormat}, Tags: ${tagNames.join(',')}`);
     
     if (hasFormat) {
-      console.log("Removing formatting");
       this.removeFormatting(tagNames);
     } else {
-      console.log("Adding formatting");
       this.addFormatting(defaultTag);
     }
     
-    // Ensure the editor regains focus
+    // Restore selection and focus
+    try {
+      this.setRange(savedRange);
+    } catch (e) {
+      console.warn("Could not restore exact selection after formatting");
+    }
+    
     if (this.contentArea) {
       this.contentArea.focus();
     }

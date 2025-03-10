@@ -425,52 +425,206 @@ export class Editor {
     const plugin = this.pluginRegistry.getPlugin(pluginName);
     if (!plugin) return false;
     
-    // Check if plugin supports model operations
     if (plugin.supportsDocumentModel && plugin.supportsDocumentModel()) {
       const adapter = this.adapterRegistry.getAdapter(pluginName);
       const model = this.documentModel;
       const range = this.selectionModel.toDocumentRange();
       
+      // Don't apply formatting if there's no actual selection
       if (adapter && model && range) {
-        // Start a batch operation for history
+        // Save cursor position before operation
+        const selection = window.getSelection();
+        const originalRange = selection && selection.rangeCount > 0 ? 
+                            selection.getRangeAt(0).cloneRange() : null;
+        
         this.historyManager.startBatch();
-        
-        // Execute model operation
         adapter.applyToModel(model, range, params);
-        
-        // End the batch operation
         this.historyManager.endBatch();
         
-        // Render changes
-        this.renderDocument();
+        // Use a partial render if possible rather than full document render
+        this.renderAffectedNodesOnly(range);
         
-        // Emit event
+        // Restore cursor position
+        if (originalRange) {
+          try {
+            selection?.removeAllRanges();
+            selection?.addRange(originalRange);
+            this.selectionModel.fromDOMRange(originalRange);
+          } catch (e) {
+            console.warn("Could not restore selection after operation:", e);
+          }
+        }
+        
         this.pluginRegistry.emit('editor:modeloperation', {
           plugin: pluginName,
           params,
           editor: this
         });
-        
         return true;
       }
     }
     
-    // Fall back to regular plugin execution
     plugin.execute();
     return true;
   }
 
+  private renderAffectedNodesOnly(range: DocumentRange): void {
+    // For now, still do a full render but with selection preservation
+    const selection = window.getSelection();
+    let savedRange = null;
+    if (selection && selection.rangeCount > 0) {
+      savedRange = selection.getRangeAt(0).cloneRange();
+    }
+    
+    this.renderDocument();
+    
+    // Restore selection
+    if (savedRange) {
+      setTimeout(() => {
+        try {
+          selection?.removeAllRanges();
+          selection?.addRange(savedRange);
+        } catch (e) {
+          console.warn("Could not restore selection after render:", e);
+        }
+      }, 0);
+    }
+  }
   /**
  * Render the document model to DOM
  */
   renderDocument(): void {
+    // Save detailed selection information
+    const selection = window.getSelection();
+    let savedRange = null;
+    let savedPosition = null;
+    
+    if (selection && selection.rangeCount > 0) {
+      savedRange = selection.getRangeAt(0).cloneRange();
+      
+      // Save position as HTML offset for more reliable restoration
+      const content = this.contentArea.innerHTML;
+      const tempDiv = document.createElement('div');
+      tempDiv.appendChild(savedRange.cloneContents());
+      const selectedText = tempDiv.textContent || '';
+      
+      // Record the container node's position relative to its siblings
+      let container = savedRange.startContainer;
+      if (container.nodeType === Node.TEXT_NODE) {
+        container = container.parentNode as Node;
+      }
+      
+      // Get a path to the node
+      savedPosition = {
+        text: selectedText,
+        offset: savedRange.startOffset,
+        containerPath: this.getNodePath(container as HTMLElement)
+      };
+      
+      console.log("Saved position before render:", savedPosition);
+    }
+    
+    // Perform rendering
     this.renderingManager.render();
     
-    // Emit event after rendering
+    // Restore selection with multiple strategies
+    if (savedRange && selection) {
+      // Try multiple approaches to restore cursor position
+      setTimeout(() => {
+        let restored = false;
+        
+        // First try: direct range restoration
+        try {
+          selection.removeAllRanges();
+          selection.addRange(savedRange);
+          restored = true;
+        } catch (e) {
+          console.log("Direct range restoration failed");
+        }
+        
+        // Second try: node path approach
+        if (!restored && savedPosition) {
+          try {
+            const node = this.getNodeByPath(savedPosition.containerPath);
+            if (node) {
+              // Look for text nodes
+              const textNodes = this.getAllTextNodesIn(node);
+              if (textNodes.length > 0) {
+                // Place cursor at similar position
+                const range = document.createRange();
+                const offset = Math.min(savedPosition.offset, textNodes[0].textContent?.length || 0);
+                range.setStart(textNodes[0], offset);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                restored = true;
+              }
+            }
+          } catch (e) {
+            console.log("Path-based restoration failed");
+          }
+        }
+        
+        // Last resort: focus without restoring exact position
+        if (!restored) {
+          this.focus();
+        }
+      }, 10); // Slight delay to allow rendering to complete
+    }
+    
     this.pluginRegistry.emit('editor:modelrendered', {
       editor: this,
       stats: this.renderingManager.getRenderStats()
     });
+  }
+  
+  // Add these helper methods to the Editor class:
+  
+  private getNodePath(node: HTMLElement): number[] {
+    const path = [];
+    let current = node;
+    
+    while (current !== this.contentArea && current.parentNode) {
+      const parent = current.parentNode as HTMLElement;
+      const children = Array.from(parent.children);
+      const index = children.indexOf(current);
+      if (index !== -1) {
+        path.unshift(index);
+      }
+      current = parent;
+    }
+    
+    return path;
+  }
+  
+  private getNodeByPath(path: number[]): HTMLElement | null {
+    let current: HTMLElement = this.contentArea;
+    
+    for (const index of path) {
+      if (index >= 0 && index < current.children.length) {
+        current = current.children[index] as HTMLElement;
+      } else {
+        return null;
+      }
+    }
+    
+    return current;
+  }
+  
+  private getAllTextNodesIn(element: HTMLElement): Text[] {
+    const textNodes: Text[] = [];
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      textNodes.push(node as Text);
+    }
+    
+    return textNodes;
   }
 
   /**

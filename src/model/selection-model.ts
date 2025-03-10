@@ -33,11 +33,17 @@ export class SelectionModel {
   toDocumentRange(): DocumentRange | null {
     if (!this.anchor || !this.focus) return null;
     
-    // Determine start and end based on position comparison
+    // For consistent behavior, always create ranges in document order
     const isBackward = this.comparePositions(this.focus, this.anchor) < 0;
-    
     const start = isBackward ? this.focus : this.anchor;
     const end = isBackward ? this.anchor : this.focus;
+    
+    console.log(`Creating range from ${start.node.id}[${start.offset}] to ${end.node.id}[${end.offset}]`);
+    
+    // Check if this is a same-node selection (most common case)
+    if (start.node.id === end.node.id) {
+      console.log(`Single node selection within ${start.node.id}`);
+    }
     
     return { start, end };
   }
@@ -124,7 +130,6 @@ export class SelectionModel {
     try {
       const startPosition = this.domPointToModelPosition(range.startContainer, range.startOffset);
       const endPosition = this.domPointToModelPosition(range.endContainer, range.endOffset);
-      
       if (startPosition && endPosition) {
         this.anchor = startPosition;
         this.focus = endPosition;
@@ -133,7 +138,6 @@ export class SelectionModel {
     } catch (e) {
       console.error('Error converting DOM range to model positions:', e);
     }
-    
     return false;
   }
   

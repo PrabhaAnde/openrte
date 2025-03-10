@@ -14,7 +14,7 @@ export class BoldModelAdapter implements PluginModelAdapter {
    * @param range Document range to apply formatting to
    */
   applyToModel(
-    model: DocumentModel, 
+    model: DocumentModel,
     range: DocumentRange
   ): void {
     TextFormattingOperations.toggleMark(model, range, 'bold');
@@ -28,7 +28,7 @@ export class BoldModelAdapter implements PluginModelAdapter {
    * @returns True if the selection has bold formatting
    */
   getStateFromModel(
-    model: DocumentModel, 
+    model: DocumentModel,
     range: DocumentRange
   ): boolean {
     return TextFormattingOperations.hasMarkInRange(model, range, 'bold');

@@ -46,10 +46,14 @@ export class SelectionObserver {
   private syncSelectionFromDOM(): void {
     const range = this.editor.getSelectionManager().getRange();
     if (range) {
-      this.selectionModel.fromDOMRange(range);
+      // Get current state before converting to model
+      console.log(`Syncing DOM range: ${range.startContainer.nodeName}[${range.startOffset}] to ${range.endContainer.nodeName}[${range.endOffset}]`);
       
-      // Emit selection change event
-      if (this.editor.getPluginRegistry()) {
+      // Always create a fresh model selection
+      const result = this.selectionModel.fromDOMRange(range);
+      console.log(`DOM->Model sync result: ${result ? 'success' : 'failed'}`);
+      
+      if (result && this.editor.getPluginRegistry()) {
         this.editor.getPluginRegistry().emit('editor:modelselectionchange', {
           selectionModel: this.selectionModel,
           editor: this.editor

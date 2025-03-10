@@ -37,10 +37,28 @@ export class RenderingManager {
    * Render the current document
    */
   render(): void {
-    const startTime = performance.now();
+    // Save the current selection before rendering
+    const selection = window.getSelection();
+    let savedRange = null;
+    if (selection && selection.rangeCount > 0) {
+      savedRange = selection.getRangeAt(0).cloneRange();
+    }
     
+    const startTime = performance.now();
     const document = this.documentModel.getDocument();
+    
+    // Perform the rendering
     DocumentRenderer.renderDocument(document, this.container);
+    
+    // Try to restore the selection if possible
+    if (savedRange) {
+      try {
+        selection?.removeAllRanges();
+        selection?.addRange(savedRange);
+      } catch (e) {
+        console.warn("Could not restore selection after rendering:", e);
+      }
+    }
     
     const endTime = performance.now();
     this.updateRenderStats(startTime, endTime);

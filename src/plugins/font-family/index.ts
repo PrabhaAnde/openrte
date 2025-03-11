@@ -1,5 +1,7 @@
 import { BasePlugin } from '../base-plugin';
 import { Editor } from '../../core/editor';
+import { FontFamilyModelAdapter } from './model-adapter';
+import { PluginModelAdapter } from '../../model/plugin-model-adapter';
 
 interface FontOption {
   name: string;
@@ -8,6 +10,7 @@ interface FontOption {
 
 export class FontFamilyPlugin extends BasePlugin {
   private fontDropdown: HTMLSelectElement;
+  private modelAdapter: FontFamilyModelAdapter;
   private fonts: FontOption[] = [
     { name: 'Default', value: '' },
     { name: 'Arial', value: 'Arial, sans-serif' },
@@ -24,6 +27,7 @@ export class FontFamilyPlugin extends BasePlugin {
   constructor() {
     super('fontFamily', null, 'Font Family', 'openrte-font-family-control');
     this.fontDropdown = document.createElement('select');
+    this.modelAdapter = new FontFamilyModelAdapter();
   }
 
   init(editor: Editor): void {
@@ -37,11 +41,24 @@ export class FontFamilyPlugin extends BasePlugin {
   }
 
   execute(): void {
-    super.execute();
-  }
-
-  protected executeDOMBased(): void {
-    // Implementation handled by handleFontChange
+    if (!this.editor) return;
+    
+    const selectedFont = this.fontDropdown.value;
+    if (!selectedFont) return;
+    
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      if (model && range) {
+        this.modelAdapter.applyToModel(model, range, { fontFamily: selectedFont });
+        this.editor.renderDocument();
+        return;
+      }
+    }
+    
+    this.applyFontFamily(selectedFont);
+    this.fontDropdown.selectedIndex = 0;
+    this.editor.focus();
   }
 
   createToolbarControl(): HTMLElement {
@@ -65,6 +82,14 @@ export class FontFamilyPlugin extends BasePlugin {
     return this.fontDropdown;
   }
 
+  getModelAdapter(): PluginModelAdapter {
+    return this.modelAdapter;
+  }
+
+  protected executeDOMBased(): void {
+    // Not needed as execute() handles both model and DOM cases
+  }
+
   private handleFontChange = (event: Event): void => {
     event.preventDefault();
     if (!this.editor) return;
@@ -78,254 +103,426 @@ export class FontFamilyPlugin extends BasePlugin {
 
   private applyFontFamily(fontFamily: string): void {
     if (!this.editor) return;
-    
-    // Get selection and range
     const selectionManager = this.editor.getSelectionManager();
     const range = selectionManager.getRange();
-    
     if (!range) return;
     
-    // Make a clean copy of the range to avoid browser selection quirks
-    const cleanRange = range.cloneRange();
+    // Use the same detection logic as in SelectionManager
+    // This fixes double-click and triple-click issues
+    const isWordSelection = this.isWordSelection(range);
     
-    // Check if this is a word or line selection (double/triple click)
-    const isWordOrLineSelection = this.detectWordOrLineSelection(cleanRange);
-    
-    // Apply font family differently based on selection type
-    if (isWordOrLineSelection) {
-      this.applyFontToWordOrLineSelection(cleanRange, fontFamily);
-    } else {
-      // Standard selection
-      selectionManager.applyToSelection(range => {
-        this.applyFontFamilyToRange(range, fontFamily);
-      });
+    try {
+      // Take a different approach that doesn't rely on SelectionManager's applyToSelection
+      // This prevents issues with selection restoration that can happen when DOM nodes change
+      if (isWordSelection) {
+        // Clone the range to avoid modifying the original
+        const clonedRange = range.cloneRange();
+        this.applyFontToWord(clonedRange, fontFamily);
+      } else {
+        // For normal selections, apply directly without using SelectionManager's wrapper
+        const clonedRange = range.cloneRange();
+        this.applyFontFamilyToRange(clonedRange, fontFamily);
+      }
+    } catch (e) {
+      console.warn('Error applying font family:', e);
+    } finally {
+      // Focus back on the editor
+      if (this.editor) {
+        this.editor.focus();
+      }
     }
     
-    // Force a DOM refresh to ensure the changes take effect
-    setTimeout(() => {
-      // Try to restore selection
-      try {
-        selectionManager.setRange(cleanRange);
-      } catch (e) {
-        console.warn("Failed to restore selection after font change:", e);
-      }
-      
-      // Force update the dropdown state
-      this.updateDropdownState();
-      
-      // Refocus the editor
-      this.editor?.focus();
-    }, 10);
+    this.updateDropdownState();
   }
-  
-  /**
-   * Detect if the selection is likely a word or line selection (double/triple click)
-   */
-  private detectWordOrLineSelection(range: Range): boolean {
+
+  private isWordSelection(range: Range): boolean {
     if (range.collapsed) return false;
     
-    // Check if selection starts/ends at word or paragraph boundaries
-    const startNode = range.startContainer;
-    const endNode = range.endContainer;
-    
-    // If both nodes are text nodes
-    if (startNode.nodeType === Node.TEXT_NODE && endNode.nodeType === Node.TEXT_NODE) {
-      const startText = startNode.textContent || '';
-      const endText = endNode.textContent || '';
+    // For double-click (word selection), the range will be within a single text node
+    // and will start and end at word boundaries
+    if (range.startContainer === range.endContainer && 
+        range.startContainer.nodeType === Node.TEXT_NODE) {
+      const text = range.startContainer.textContent || '';
+      const beforeStart = text.substring(0, range.startOffset).trim();
+      const afterEnd = text.substring(range.endOffset).trim();
+      const selectedText = text.substring(range.startOffset, range.endOffset).trim();
       
-      // Word selection often starts at the beginning of a word and ends at the end
-      const startsAtWordBoundary = range.startOffset === 0 || 
-                                 /\s/.test(startText.charAt(range.startOffset - 1));
-      
-      const endsAtWordBoundary = range.endOffset === endText.length ||
-                               (range.endOffset < endText.length && /\s/.test(endText.charAt(range.endOffset)));
-      
-      // If both at word boundaries, likely a word or line selection
-      if (startsAtWordBoundary && endsAtWordBoundary) {
-        return true;
-      }
-      
-      // Line selection often includes the entire textContent
-      if (range.startOffset === 0 && range.endOffset === endText.length) {
-        return true;
-      }
-    }
-    
-    // Also check if selection spans multiple block elements - likely a triple-click
-    if (startNode !== endNode) {
-      const startBlock = this.getParentBlock(startNode);
-      const endBlock = this.getParentBlock(endNode);
-      
-      if (startBlock && endBlock && startBlock !== endBlock) {
+      // If selection starts at a word boundary and ends at a word boundary
+      if ((beforeStart === '' || beforeStart.endsWith(' ')) &&
+          (afterEnd === '' || afterEnd.startsWith(' ')) &&
+          selectedText.indexOf(' ') === -1) {
         return true;
       }
     }
     
     return false;
   }
-  
-  /**
-   * Get the parent block element of a node
-   */
-  private getParentBlock(node: Node): HTMLElement | null {
-    const blockTags = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'];
-    let current = node;
+
+  private applyFontToWord(range: Range, fontFamily: string): void {
+    if (!range || range.collapsed) return;
     
-    while (current && current.nodeType !== Node.ELEMENT_NODE) {
-      if (!current.parentNode) break;
-      current = current.parentNode;
-    }
-    
-    while (current && current !== this.editor?.getContentArea()) {
-      if (current.nodeType === Node.ELEMENT_NODE) {
-        const element = current as HTMLElement;
-        if (blockTags.includes(element.tagName)) {
-          return element;
-        }
-      }
-      if (!current.parentNode) break;
-      current = current.parentNode;
-    }
-    
-    return null;
-  }
-  
-  /**
-   * Special handler for word or line selections (double/triple click)
-   */
-  private applyFontToWordOrLineSelection(range: Range, fontFamily: string): void {
-    if (!this.editor) return;
-    
-    // Extract the contents
-    const fragment = range.extractContents();
-    
-    // Create a wrapper span
+    // Create a new span for the font
     const span = document.createElement('span');
     span.style.fontFamily = fontFamily;
     span.setAttribute('data-font-family', 'true');
     
-    // Find and fix any nested font spans to prevent formatting issues
-    this.normalizeNestedFontSpans(fragment, fontFamily);
+    // Remember the container for later selection
+    const startContainer = range.startContainer;
+    const startOffset = range.startOffset;
+    const endContainer = range.endContainer;
+    const endOffset = range.endOffset;
     
-    // Add the content to the span
-    span.appendChild(fragment);
+    try {
+      // Try to use surroundContents which is cleaner when it works
+      range.surroundContents(span);
+    } catch (e) {
+      // For more complex selections that can't use surroundContents
+      const fragment = range.extractContents();
+      span.appendChild(fragment);
+      range.insertNode(span);
+    }
     
-    // Insert the span
-    range.insertNode(span);
-    
-    // Normalize and clean up any adjacent or nested spans
+    // Clean up any nested spans
     if (span.parentNode) {
-      span.parentNode.normalize();
       this.cleanupFontSpans(span.parentNode as HTMLElement);
     }
     
-    // Update the range
-    range.selectNodeContents(span);
-  }
-
-  /**
-   * Fix nested font spans in a document fragment
-   */
-  private normalizeNestedFontSpans(fragment: DocumentFragment, fontFamily: string): void {
-    // Find all font spans
-    const spans = fragment.querySelectorAll('span[style*="font-family"]');
-    
-    spans.forEach(span => {
-      // Update to the new font family
-      (span as HTMLElement).style.fontFamily = fontFamily;
+    // Create a new range and try to position it after our operation
+    try {
+      const newRange = document.createRange();
       
-      // Remove any nested font spans with their content preserved
-      const nestedSpans = span.querySelectorAll('span[style*="font-family"]');
-      nestedSpans.forEach(nestedSpan => {
-        const parent = nestedSpan.parentNode;
-        if (parent) {
-          while (nestedSpan.firstChild) {
-            parent.insertBefore(nestedSpan.firstChild, nestedSpan);
+      // Try to place cursor at the end of our modified content
+      newRange.selectNodeContents(span);
+      newRange.collapse(false); // Collapse to end
+      
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+      }
+    } catch (e) {
+      // If that fails, try to get back to where we started
+      console.warn('Error restoring selection, trying alternate method:', e);
+      try {
+        // Try to restore using original containers
+        const newRange = document.createRange();
+        if (startContainer && startContainer.parentNode && 
+            endContainer && endContainer.parentNode) {
+          
+          // Find the closest valid text node
+          const walker = document.createTreeWalker(
+            this.editor?.getContentArea() || document.body,
+            NodeFilter.SHOW_TEXT
+          );
+          let currentNode = walker.currentNode;
+          while (currentNode) {
+            if (currentNode.textContent && currentNode.textContent.trim()) {
+              break;
+            }
+            currentNode = walker.nextNode() as Text;
           }
-          parent.removeChild(nestedSpan);
+          
+          if (currentNode) {
+            newRange.setStart(currentNode, 0);
+            newRange.setEnd(currentNode, 0);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+            }
+          }
         }
-      });
-    });
+      } catch (e2) {
+        console.warn('Failed to restore selection with alternate method:', e2);
+      }
+    }
   }
 
   private applyFontFamilyToRange(range: Range, fontFamily: string): void {
     if (range.collapsed) return;
     
-    // Check if we're dealing with a word or line selection
-    if (this.detectWordOrLineSelection(range)) {
-      this.applyFontToWordOrLineSelection(range.cloneRange(), fontFamily);
+    // Remember where we are
+    const commonAncestor = range.commonAncestorContainer;
+    
+    // Special case for line/paragraph selections that might contain multiple formatted spans
+    const isLineSelection = this.isLineSelection(range);
+    
+    if (isLineSelection) {
+      // For line selections, take special care to preserve whitespace
+      this.applyFontToLineSelection(range, fontFamily);
       return;
     }
     
-    // Begin with extracting content - this helps with selection boundary issues
+    // Regular selection case - proceed as before
     const fragment = range.extractContents();
-    
-    // Create wrapper span
     const span = document.createElement('span');
     span.style.fontFamily = fontFamily;
     span.setAttribute('data-font-family', 'true');
     
-    // Normalize any nested font spans in the fragment
+    // Clean up nested font spans
     this.normalizeNestedFontSpans(fragment, fontFamily);
-    
-    // Append the content to the span
     span.appendChild(fragment);
-    
-    // Insert the span back
     range.insertNode(span);
     
-    // Clean up any adjacent or nested spans
+    // Clean up adjacent spans
     if (span.parentNode) {
       span.parentNode.normalize();
       this.cleanupFontSpans(span.parentNode as HTMLElement);
     }
     
-    // Update the range
-    range.selectNodeContents(span);
+    // Create a new range after our modifications
+    try {
+      const newRange = document.createRange();
+      // Place cursor at end of our span
+      newRange.selectNodeContents(span);
+      newRange.collapse(false); // Collapse to end
+      
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+      }
+    } catch (e) {
+      console.warn('Error restoring selection after range formatting:', e);
+      // Fall back to a simpler approach
+      try {
+        if (this.editor) {
+          this.editor.focus();
+        }
+      } catch (e2) {
+        console.warn('Failed to restore focus to editor:', e2);
+      }
+    }
+  }
+  
+  // Check if this is a line or paragraph selection (likely from triple-click)
+  private isLineSelection(range: Range): boolean {
+    // If selection spans multiple block elements or covers most of a paragraph
+    if (range.startContainer !== range.endContainer) {
+      // Check if common ancestor is a block element
+      const commonAncestor = range.commonAncestorContainer;
+      if (commonAncestor.nodeType === Node.ELEMENT_NODE) {
+        const element = commonAncestor as HTMLElement;
+        if (this.isBlockElement(element)) {
+          // Check how much of the element is selected
+          const elementContent = element.textContent || '';
+          
+          // Create a fragment of the selection
+          const tempFragment = range.cloneContents();
+          const tempDiv = document.createElement('div');
+          tempDiv.appendChild(tempFragment);
+          const selectedContent = tempDiv.textContent || '';
+          
+          // If selection contains most of the element content
+          if (selectedContent.length > elementContent.length * 0.8) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Handle font application for line/paragraph selections (triple-click)
+  private applyFontToLineSelection(range: Range, fontFamily: string): void {
+    // Instead of extracting content, we'll walk through and format each text node
+    // This preserves the structure better, especially whitespace between formatted spans
+    
+    const nodes = this.getTextNodesInRange(range);
+    
+    // Track which parent spans we've already processed to avoid duplication
+    const processedParents = new Set<Node>();
+    
+    nodes.forEach(textNode => {
+      // Skip empty text nodes
+      if (!textNode.textContent || textNode.textContent.trim() === '') {
+        return;
+      }
+      
+      // Find parent element
+      let parent = textNode.parentNode;
+      
+      // If this text node is inside a font span
+      if (parent && 
+          parent.nodeType === Node.ELEMENT_NODE && 
+          (parent as HTMLElement).tagName === 'SPAN' && 
+          (parent as HTMLElement).style.fontFamily) {
+        
+        // If we haven't processed this parent yet
+        if (!processedParents.has(parent)) {
+          (parent as HTMLElement).style.fontFamily = fontFamily;
+          processedParents.add(parent);
+        }
+      } 
+      // Text node isn't in a font span, wrap it in one
+      else {
+        // Don't wrap standalone whitespace
+        if (textNode.textContent.trim() !== '') {
+          const span = document.createElement('span');
+          span.style.fontFamily = fontFamily;
+          
+          // Wrap the text node
+          if (parent) {
+            parent.insertBefore(span, textNode);
+            span.appendChild(textNode);
+          }
+        }
+      }
+    });
+    
+    // No need to restore selection here - the DOM structure has been
+    // modified in place, so the original selection should still be valid
+    try {
+      if (this.editor) {
+        this.editor.focus();
+      }
+    } catch (e) {
+      console.warn('Failed to restore focus after line formatting:', e);
+    }
+  }
+  
+  // Get all text nodes in the range
+  private getTextNodesInRange(range: Range): Text[] {
+    const nodes: Text[] = [];
+    
+    if (range.collapsed) {
+      return nodes;
+    }
+    
+    const iterator = document.createNodeIterator(
+      range.commonAncestorContainer,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          // Create a range for this text node
+          const nodeRange = document.createRange();
+          nodeRange.selectNode(node);
+          
+          // Check if this node intersects with our selection range
+          if (range.compareBoundaryPoints(Range.END_TO_START, nodeRange) <= 0 &&
+              range.compareBoundaryPoints(Range.START_TO_END, nodeRange) >= 0) {
+            return NodeFilter.FILTER_ACCEPT;
+          }
+          
+          return NodeFilter.FILTER_REJECT;
+        }
+      } as NodeFilter
+    );
+    
+    let node;
+    while (node = iterator.nextNode()) {
+      nodes.push(node as Text);
+    }
+    
+    return nodes;
+  }
+  
+  // Check if element is a block element
+  private isBlockElement(element: HTMLElement): boolean {
+    const blockElements = [
+      'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 
+      'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'LI'
+    ];
+    
+    return blockElements.includes(element.tagName);
+  }
+
+  private normalizeNestedFontSpans(fragment: DocumentFragment, fontFamily: string): void {
+    // First identify all text nodes including whitespace
+    const textNodes = this.getAllTextNodes(fragment);
+    
+    // Find all spans with font-family styles
+    const spans = fragment.querySelectorAll('span[style*="font-family"]');
+    
+    // Apply the new font family to spans but preserve their structure
+    spans.forEach(span => {
+      (span as HTMLElement).style.fontFamily = fontFamily;
+    });
+    
+    // Make sure all text nodes are properly wrapped
+    textNodes.forEach(textNode => {
+      // Skip text nodes that are already inside font spans
+      if (this.isInsideFontSpan(textNode)) {
+        return;
+      }
+      
+      // For text nodes not in font spans (especially whitespace), 
+      // wrap them in a span if they're not just whitespace
+      if (textNode.textContent && textNode.textContent.trim() !== '') {
+        const newSpan = document.createElement('span');
+        newSpan.style.fontFamily = fontFamily;
+        
+        // If the node is not already wrapped, wrap it
+        if (textNode.parentNode) {
+          textNode.parentNode.insertBefore(newSpan, textNode);
+          newSpan.appendChild(textNode);
+        }
+      }
+    });
+  }
+  
+  // Helper to check if a node is already inside a font span
+  private isInsideFontSpan(node: Node): boolean {
+    let current = node.parentNode;
+    while (current) {
+      if (current.nodeType === Node.ELEMENT_NODE && 
+          (current as HTMLElement).tagName === 'SPAN' && 
+          (current as HTMLElement).style.fontFamily) {
+        return true;
+      }
+      current = current.parentNode;
+    }
+    return false;
+  }
+  
+  // Get all text nodes including whitespace
+  private getAllTextNodes(container: Node): Text[] {
+    const textNodes: Text[] = [];
+    const walker = document.createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node as Text);
+    }
+    
+    return textNodes;
   }
 
   private cleanupFontSpans(container: HTMLElement): void {
     if (!container) return;
     
-    // Find all font spans
+    // Remove empty spans
     const fontSpans = container.querySelectorAll('span[style*="font-family"]');
-    
-    // First remove empty spans
     fontSpans.forEach(span => {
       if (!span.textContent?.trim()) {
         span.parentNode?.removeChild(span);
       }
     });
     
-    // Merge adjacent spans with the same font
     this.mergeAdjacentFontSpans(container);
-    
-    // Fix any remaining nested spans
     this.fixNestedFontSpans(container);
   }
 
   private mergeAdjacentFontSpans(container: HTMLElement): void {
-    // This is a recursive function that processes direct children first
-    // and then processes deeper child elements
-    
-    // First, find all direct child spans
     const spans: HTMLElement[] = [];
     for (let i = 0; i < container.childNodes.length; i++) {
       const node = container.childNodes[i];
-      if (node.nodeType === Node.ELEMENT_NODE && 
+      if (node.nodeType === Node.ELEMENT_NODE &&
           (node as HTMLElement).tagName === 'SPAN' &&
           (node as HTMLElement).style.fontFamily) {
         spans.push(node as HTMLElement);
       }
     }
     
-    // Compare adjacent spans
     for (let i = 0; i < spans.length - 1; i++) {
       const currentSpan = spans[i];
       let nextSibling = currentSpan.nextSibling;
-      
-      // Skip text nodes between spans
-      while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE && 
+      while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE &&
              !nextSibling.textContent?.trim()) {
         nextSibling = nextSibling.nextSibling;
       }
@@ -333,84 +530,57 @@ export class FontFamilyPlugin extends BasePlugin {
       if (nextSibling && nextSibling.nodeType === Node.ELEMENT_NODE &&
           (nextSibling as HTMLElement).tagName === 'SPAN' &&
           (nextSibling as HTMLElement).style.fontFamily) {
-        
         const nextSpan = nextSibling as HTMLElement;
-        
-        // Check if fonts match
         if (this.areFontFamiliesEquivalent(
-            currentSpan.style.fontFamily, 
+            currentSpan.style.fontFamily,
             nextSpan.style.fontFamily)) {
-          
-          // Copy children to the first span
           while (nextSpan.firstChild) {
             currentSpan.appendChild(nextSpan.firstChild);
           }
-          
-          // Remove the second span
           nextSpan.parentNode?.removeChild(nextSpan);
-          
-          // Adjust our span array
           spans.splice(i + 1, 1);
-          i--; // To check the new adjacent span on next iteration
+          i--;
         }
       }
     }
     
-    // Now process child elements recursively
     for (const span of spans) {
       this.mergeAdjacentFontSpans(span);
     }
   }
 
   private fixNestedFontSpans(container: HTMLElement): void {
-    // Find all font spans
     const fontSpans = Array.from(container.querySelectorAll('span[style*="font-family"]'));
-    
-    // Sort by DOM depth to process deepest spans first
     fontSpans.sort((a, b) => {
-      // Count parents to determine depth
       let depthA = 0, depthB = 0;
       let parentA: Node | null = a, parentB: Node | null = b;
-      
       while (parentA) {
         depthA++;
         parentA = parentA.parentNode;
       }
-      
       while (parentB) {
         depthB++;
         parentB = parentB.parentNode;
       }
-      
-      return depthB - depthA; // Process deepest first
+      return depthB - depthA;
     });
     
-    // Process nested spans
     fontSpans.forEach(span => {
       let parent = span.parentNode;
-      
-      // Check if parent is also a font span
-      if (parent && parent.nodeType === Node.ELEMENT_NODE && 
+      if (parent && parent.nodeType === Node.ELEMENT_NODE &&
           (parent as HTMLElement).tagName === 'SPAN' &&
           (parent as HTMLElement).style.fontFamily) {
-        
         const parentSpan = parent as HTMLElement;
-        
-        // If same font, unwrap this span
         if (this.areFontFamiliesEquivalent(
-            (span as HTMLElement).style.fontFamily, 
+            (span as HTMLElement).style.fontFamily,
             parentSpan.style.fontFamily)) {
-          
           while (span.firstChild) {
             parent.insertBefore(span.firstChild, span);
           }
           parent.removeChild(span);
         }
-        // If different font, let child win by replacing parent's style
         else {
           parentSpan.style.fontFamily = (span as HTMLElement).style.fontFamily;
-          
-          // Then unwrap the child
           while (span.firstChild) {
             parent.insertBefore(span.firstChild, span);
           }
@@ -422,15 +592,24 @@ export class FontFamilyPlugin extends BasePlugin {
 
   private updateDropdownState = (): void => {
     if (!this.editor) return;
-    const range = this.editor.getSelectionManager().getRange();
-    if (!range) return;
     
-    let fontFamily = this.getSelectionFontFamily(range);
+    let fontFamily: string | null = null;
+    
+    if (this.supportsDocumentModel()) {
+      const model = this.editor.getDocumentModel();
+      const range = this.editor.getDocumentRange();
+      if (model && range) {
+        const state = this.modelAdapter.getStateFromModel(model, range);
+        fontFamily = state.fontFamily;
+      } else {
+        fontFamily = this.getDOMFontFamily();
+      }
+    } else {
+      fontFamily = this.getDOMFontFamily();
+    }
     
     if (fontFamily) {
-      // Try to find a matching font in the dropdown
       let matchFound = false;
-      
       for (let i = 0; i < this.fontDropdown.options.length; i++) {
         const optionValue = this.fontDropdown.options[i].value;
         if (optionValue && this.areFontFamiliesEquivalent(optionValue, fontFamily)) {
@@ -439,8 +618,6 @@ export class FontFamilyPlugin extends BasePlugin {
           break;
         }
       }
-      
-      // If no match found, default to the first option
       if (!matchFound) {
         this.fontDropdown.selectedIndex = 0;
       }
@@ -449,130 +626,18 @@ export class FontFamilyPlugin extends BasePlugin {
     }
   };
 
-  private getSelectionFontFamily(range: Range): string | null {
+  private getDOMFontFamily(): string | null {
     if (!this.editor) return null;
+    const range = this.editor.getSelectionManager().getRange();
+    if (!range) return null;
     
-    // For cursor position (collapsed range)
-    if (range.collapsed) {
-      let node = range.commonAncestorContainer;
-      if (node.nodeType === Node.TEXT_NODE) {
-        node = node.parentNode as Node;
-      }
-      return this.getNodeFontFamily(node as HTMLElement);
+    let node = range.commonAncestorContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentNode as Node;
     }
     
-    // For word/line selection, try to handle specially
-    if (this.detectWordOrLineSelection(range)) {
-      // Try to get the font from the common parent first
-      const parentBlock = this.getParentBlock(range.commonAncestorContainer);
-      if (parentBlock) {
-        const fontSpans = parentBlock.querySelectorAll('span[style*="font-family"]');
-        if (fontSpans.length === 1) {
-          // If there's only one font span in the block, it's likely what we want
-          return (fontSpans[0] as HTMLElement).style.fontFamily;
-        }
-      }
-    }
-    
-    // Clone to avoid modifying the selection
-    const clonedRange = range.cloneRange();
-    const fragment = clonedRange.cloneContents();
-    const tempDiv = document.createElement('div');
-    tempDiv.appendChild(fragment);
-    
-    // Find all font spans in the fragment
-    const fontSpans = tempDiv.querySelectorAll('span[style*="font-family"]');
-    
-    if (fontSpans.length > 0) {
-      // If there's only one span or all spans have the same font, return that font
-      const firstFont = (fontSpans[0] as HTMLElement).style.fontFamily;
-      
-      // Single span case
-      if (fontSpans.length === 1) {
-        return firstFont;
-      }
-      
-      // Check if all spans have the same font
-      const allSameFont = Array.from(fontSpans).every(span => 
-        this.areFontFamiliesEquivalent((span as HTMLElement).style.fontFamily, firstFont));
-      
-      if (allSameFont) {
-        return firstFont;
-      }
-      
-      // Mixed fonts case
-      // Check which font covers the most content by text length
-      const fontCoverage = new Map<string, number>();
-      fontSpans.forEach(span => {
-        const font = (span as HTMLElement).style.fontFamily;
-        const textLength = span.textContent?.length || 0;
-        const currentCount = fontCoverage.get(font) || 0;
-        fontCoverage.set(font, currentCount + textLength);
-      });
-      
-      // Find the font with the most coverage
-      let maxCoverage = 0;
-      let dominantFont = null;
-      
-      fontCoverage.forEach((coverage, font) => {
-        if (coverage > maxCoverage) {
-          maxCoverage = coverage;
-          dominantFont = font;
-        }
-      });
-      
-      return dominantFont;
-    }
-    
-    // If no font spans found, try to get computed style
-    if (tempDiv.textContent?.trim()) {
-      const textNodes = this.getAllTextNodes(tempDiv);
-      if (textNodes.length > 0) {
-        const firstTextNode = textNodes[0];
-        if (firstTextNode.parentNode) {
-          const computedStyle = window.getComputedStyle(firstTextNode.parentNode as HTMLElement);
-          return computedStyle.fontFamily;
-        }
-      }
-    }
-    
-    return null;
-  }
-
-  private getAllTextNodes(element: Node): Text[] {
-    const textNodes: Text[] = [];
-    const walker = document.createTreeWalker(
-      element,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: (node) => {
-          // Only accept non-empty text nodes
-          return node.textContent?.trim() 
-            ? NodeFilter.FILTER_ACCEPT 
-            : NodeFilter.FILTER_REJECT;
-        }
-      }
-    );
-    
-    let node: Node | null;
-    while (node = walker.nextNode()) {
-      textNodes.push(node as Text);
-    }
-    
-    return textNodes;
-  }
-
-  private getNodeFontFamily(element: HTMLElement): string | null {
-    if (!element) return null;
-    
-    // Check for inline style first
-    if (element.style && element.style.fontFamily) {
-      return element.style.fontFamily;
-    }
-    
-    // Check parent elements for font-family style
-    let current = element;
-    while (current && current !== this.editor?.getContentArea()) {
+    let current = node as HTMLElement;
+    while (current && current !== this.editor.getContentArea()) {
       if (current.style && current.style.fontFamily) {
         return current.style.fontFamily;
       }
@@ -580,8 +645,8 @@ export class FontFamilyPlugin extends BasePlugin {
       current = current.parentElement;
     }
     
-    // Fall back to computed style
-    const computedStyle = window.getComputedStyle(element);
+    // Use computed style as a fallback
+    const computedStyle = window.getComputedStyle(node as HTMLElement);
     if (computedStyle.fontFamily) {
       return computedStyle.fontFamily;
     }
@@ -593,7 +658,6 @@ export class FontFamilyPlugin extends BasePlugin {
     if (!font1 || !font2) return false;
     
     const normalize = (font: string) => {
-      // Remove quotes, normalize whitespace, and convert to lowercase
       return font.replace(/['"]/g, '')
                 .replace(/\s+/g, ' ')
                 .toLowerCase()
@@ -620,7 +684,7 @@ export class FontFamilyPlugin extends BasePlugin {
     // Check for font alternatives
     for (const part1 of font1Parts) {
       for (const part2 of font2Parts) {
-        if (part1 === part2 && part1 !== 'sans-serif' && 
+        if (part1 === part2 && part1 !== 'sans-serif' &&
             part1 !== 'serif' && part1 !== 'monospace') {
           return true;
         }
